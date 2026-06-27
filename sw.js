@@ -1,4 +1,4 @@
-const CACHE='pills-v2';
+const CACHE='pills-v3';
 const ASSETS=['./','./index.html','./manifest.json','./icon.svg'];
 self.addEventListener('install',e=>{
   self.skipWaiting();
@@ -10,13 +10,20 @@ self.addEventListener('activate',e=>{
 });
 self.addEventListener('fetch',e=>{
   if(e.request.method!=='GET')return;
-  e.respondWith(
-    caches.match(e.request).then(r=>r||fetch(e.request).then(resp=>{
-      const cp=resp.clone();
-      caches.open(CACHE).then(c=>c.put(e.request,cp)).catch(()=>{});
-      return resp;
-    }).catch(()=>caches.match('./index.html')))
-  );
+  const req=e.request;
+  const isHTML = req.mode==='navigate' || (req.headers.get('accept')||'').includes('text/html');
+  if(isHTML){
+    // network-first: страница всегда грузится свежая, если есть интернет
+    e.respondWith(
+      fetch(req).then(resp=>{const cp=resp.clone();caches.open(CACHE).then(c=>c.put(req,cp)).catch(()=>{});return resp;})
+        .catch(()=>caches.match(req).then(r=>r||caches.match('./index.html')))
+    );
+  } else {
+    // cache-first для статических файлов
+    e.respondWith(
+      caches.match(req).then(r=>r||fetch(req).then(resp=>{const cp=resp.clone();caches.open(CACHE).then(c=>c.put(req,cp)).catch(()=>{});return resp;}))
+    );
+  }
 });
 self.addEventListener('notificationclick',e=>{
   e.notification.close();
