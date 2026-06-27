@@ -78,7 +78,7 @@
   .empty-state p{margin:12px 0 0;font-size:15px;line-height:1.5}
 
   label.fld{display:block;margin:14px 4px 6px;font-size:13px;font-weight:700;color:var(--muted)}
-  textarea,input[type=text],input[type=time],input[type=number]{
+  textarea,input[type=text],input[type=password],input[type=time],input[type=number]{
     width:100%;background:var(--card);border:1px solid var(--line);color:var(--text);
     border-radius:14px;padding:14px;font-size:16px;font-family:inherit
   }
@@ -191,6 +191,22 @@
     <div class="card">
       <div class="settings-row">
         <div>
+          <div class="t">Умный разбор текста (ИИ)</div>
+          <div class="s">Вставь свой ключ Anthropic (sk-ant-…) — текст назначений будет разбираться точнее. Ключ хранится только на этом устройстве.</div>
+        </div>
+        <span class="pill-state" id="aiState">—</span>
+      </div>
+      <div style="padding:2px 14px 14px">
+        <input type="password" id="aiKeyInput" placeholder="sk-ant-..." autocapitalize="off" autocorrect="off" spellcheck="false">
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn sm green" style="flex:1" onclick="saveAiKey()">Сохранить ключ</button>
+          <button class="btn sm ghost" onclick="clearAiKey()">Убрать</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="settings-row">
+        <div>
           <div class="t">Уведомления</div>
           <div class="s">Напоминать, когда пора пить. Лучше работают на iPhone, если приложение добавлено на экран «Домой».</div>
         </div>
@@ -245,6 +261,7 @@ const SUPA_KEY='sb_publishable_64adyDV2RzW_GatIch0syA_gca37m5x';
 let stateT=+localStorage.getItem(LS_T)||0;
 let syncCode=localStorage.getItem(LS_CODE)||'';
 let pushTimer=null;
+const LS_AIKEY='pills.ai.key';
 
 function load(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
 function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));stateT=Date.now();localStorage.setItem(LS_T,String(stateT));schedulePush();}
@@ -439,10 +456,18 @@ function toggle(key){ if(log[key])delete log[key]; else log[key]=true; save(); r
   if(navigator.vibrate)navigator.vibrate(8); }
 function delMed(id){ meds=meds.filter(m=>m.id!==id); save(); renderMeds(); renderToday(); toast('Удалено'); }
 
-document.getElementById('btnParse').onclick=()=>{
+document.getElementById('btnParse').onclick=async ()=>{
   let raw=document.getElementById('rawText').value;
   if(!raw.trim()){toast('Сначала вставь текст');return}
-  parsed=parseText(raw);
+  let aiKey=localStorage.getItem(LS_AIKEY)||'';
+  let res=null;
+  if(aiKey){
+    let btn=document.getElementById('btnParse'); let old=btn.textContent; btn.textContent='ИИ разбирает…'; btn.disabled=true;
+    try{ res=await aiParse(raw,aiKey); }catch(e){ toast('ИИ недоступен — разобрал по правилам'); res=null; }
+    btn.textContent=old; btn.disabled=false;
+  }
+  if(!res || !res.length){ res=parseText(raw); }
+  parsed=res;
   if(parsed.length===0){toast('Не удалось разобрать');return}
   document.getElementById('previewWrap').classList.remove('hidden');
   renderParsed();
@@ -507,6 +532,31 @@ function genCode(){
   document.getElementById('syncCodeInput').value=c;
 }
 
+/* ---------- УМНЫЙ РАЗБОР ТЕКСТА (ИИ) ---------- */
+function aiStateUpd(){let e=document.getElementById('aiState'); if(e){let has=!!localStorage.getItem(LS_AIKEY); e.textContent=has?'✓':'—'; e.className='pill-state'+(has?' on':'');}}
+function saveAiKey(){let v=document.getElementById('aiKeyInput').value.trim(); if(v){localStorage.setItem(LS_AIKEY,v);toast('Ключ сохранён');}else{toast('Введите ключ');} aiStateUpd();}
+function clearAiKey(){localStorage.removeItem(LS_AIKEY);let a=document.getElementById('aiKeyInput');if(a)a.value='';toast('Ключ убран');aiStateUpd();}
+async function aiParse(raw,key){
+  const sys="Ты разбираешь текст с назначениями лекарств и возвращаешь СТРОГО JSON-массив без пояснений и без markdown. Каждый элемент: {\"name\":строка, \"dose\":строка дозировки, \"times\":массив строк времени \"ЧЧ:ММ\" в 24ч формате, \"days\":целое число дней курса или null если приём бессрочный, \"note\":короткая заметка или пустая строка}. Распредели times разумно по числу приёмов в день; если в тексте указано конкретное время — используй его. Отвечай только JSON-массивом.";
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+    headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1500,temperature:0,system:sys,messages:[{role:'user',content:raw}]})});
+  if(!r.ok){ let t=await r.text().catch(()=>''); throw new Error('AI '+r.status+' '+t.slice(0,140)); }
+  let j=await r.json();
+  let txt=(j.content&&j.content[0]&&j.content[0].text)||'';
+  let mm=txt.match(/\[[\s\S]*\]/); if(!mm) throw new Error('no json');
+  let arr=JSON.parse(mm[0]); if(!Array.isArray(arr)) throw new Error('not array');
+  return arr.map(o=>({
+    id:uid(),
+    name:(String(o.name||'').trim())||'Лекарство',
+    dose:String(o.dose||'').trim(),
+    times:(Array.isArray(o.times)&&o.times.length)?o.times.map(t=>String(t).trim().slice(0,5)).filter(Boolean):['09:00'],
+    days:(o.days===null||o.days===undefined||o.days==='')?null:(parseInt(o.days)||null),
+    note:String(o.note||'').trim(),
+    start:todayKey()
+  }));
+}
+
 /* ---------- УВЕДОМЛЕНИЯ ---------- */
 function updNotifState(){
   let el=document.getElementById('notifState');
@@ -551,7 +601,7 @@ function go(tab){
   });
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.getElementById('hTitle').textContent=TITLES[tab];
-  if(tab==='today')renderToday(); if(tab==='meds')renderMeds(); if(tab==='set')updNotifState();
+  if(tab==='today')renderToday(); if(tab==='meds')renderMeds(); if(tab==='set'){updNotifState();aiStateUpd();}
   window.scrollTo(0,0);
 }
 
@@ -565,6 +615,7 @@ function setDate(){
 setDate(); renderToday(); updNotifState();
 checkReminders();
 (function initSync(){let i=document.getElementById('syncCodeInput'); if(i)i.value=syncCode; if(syncCode){setSync('…'); cloudPull(true);} else setSync('—');})();
+(function initAi(){let a=document.getElementById('aiKeyInput'); if(a)a.value=localStorage.getItem(LS_AIKEY)||''; aiStateUpd();})();
 setInterval(()=>{checkReminders();},30000);
 setInterval(()=>{let v=!document.getElementById('v-today').classList.contains('hidden');if(v)renderToday();},60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){setDate();renderToday();checkReminders();if(syncCode)cloudPull(true);}});
