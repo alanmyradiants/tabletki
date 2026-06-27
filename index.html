@@ -8,14 +8,14 @@
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Таблетки">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <style>
   :root{
-    --bg:#0f1115; --card:#1a1d24; --card2:#232730; --line:#2c313c;
-    --text:#f2f4f8; --muted:#9aa3b2; --green:#10b981; --green-d:#0c8f66;
+    --bg:#ffffff; --card:#ffffff; --card2:#eef1f5; --line:#e3e7ee;
+    --text:#15181d; --muted:#697586; --green:#10b981; --green-d:#0c8f66;
     --red:#ef4444; --amber:#f59e0b; --blue:#3b82f6;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -37,12 +37,12 @@
     margin:8px 4px 14px;background:linear-gradient(135deg,#10b981,#0ea5a0);
     border-radius:18px;padding:16px 18px;color:#06231b;
   }
-  .banner.empty{background:var(--card);color:var(--muted)}
+  .banner.empty{background:var(--card2);color:var(--muted)}
   .banner .lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;opacity:.8}
   .banner .big{font-size:20px;font-weight:800;margin-top:3px}
   .banner .sub{font-size:14px;margin-top:2px;opacity:.85}
 
-  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:6px;margin:0 4px 12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:6px;margin:0 4px 12px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
   .row{
     display:flex;align-items:center;gap:14px;padding:14px 12px;border-radius:14px;
   }
@@ -90,7 +90,7 @@
   }
   .btn.green{background:var(--green);color:#06231b}
   .btn.ghost{background:var(--card2);color:var(--text)}
-  .btn.danger{background:#3a1d1d;color:#ff8a8a}
+  .btn.danger{background:#fdecec;color:#d92d20}
   .btn.sm{padding:11px;font-size:14px;width:auto;display:inline-block;margin:0}
 
   .preview{margin:14px 4px 0}
@@ -111,7 +111,7 @@
 
   /* tab bar */
   nav{
-    position:fixed;bottom:0;left:0;right:0;background:rgba(15,17,21,.92);
+    position:fixed;bottom:0;left:0;right:0;background:rgba(255,255,255,.94);
     backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
     border-top:1px solid var(--line);display:flex;justify-content:space-around;
     padding:8px 6px calc(8px + env(safe-area-inset-bottom));z-index:50
@@ -174,6 +174,23 @@
     <div class="card" style="margin-top:8px">
       <div class="settings-row">
         <div>
+          <div class="t">Синхронизация устройств</div>
+          <div class="s">Введи один и тот же код на компьютере и на телефоне — график будет общим.</div>
+        </div>
+        <span class="pill-state" id="syncState">—</span>
+      </div>
+      <div style="padding:2px 14px 14px">
+        <input type="text" id="syncCodeInput" placeholder="Код синхронизации" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn sm green" style="flex:1" onclick="saveSyncCode()">Подключить</button>
+          <button class="btn sm ghost" onclick="genCode()">Создать код</button>
+          <button class="btn sm ghost" onclick="cloudPull()">Обновить</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="settings-row">
+        <div>
           <div class="t">Уведомления</div>
           <div class="s">Напоминать, когда пора пить. Лучше работают на iPhone, если приложение добавлено на экран «Домой».</div>
         </div>
@@ -203,7 +220,7 @@
         <button class="btn sm danger" onclick="wipeAll()">Очистить</button>
       </div>
     </div>
-    <div class="hint" style="text-align:center;margin-top:20px">Все данные хранятся только на этом устройстве. 💊</div>
+    <div class="hint" style="text-align:center;margin-top:20px">Данные хранятся на этом устройстве, а с кодом — синхронизируются между устройствами. 💊</div>
   </section>
 </div>
 
@@ -222,9 +239,15 @@ let meds = load(LS_MEDS, []);
 let log  = load(LS_LOG, {});   // { 'YYYY-MM-DD|medId|HH:MM': true }
 let firedNotif = {};           // avoid duplicate notifications per session
 let parsed = [];
+const LS_T='pills.t', LS_CODE='pills.sync.code';
+const SUPA_URL='https://ssjghfivizubznkrdgxi.supabase.co';
+const SUPA_KEY='sb_publishable_64adyDV2RzW_GatIch0syA_gca37m5x';
+let stateT=+localStorage.getItem(LS_T)||0;
+let syncCode=localStorage.getItem(LS_CODE)||'';
+let pushTimer=null;
 
 function load(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
-function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));}
+function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));stateT=Date.now();localStorage.setItem(LS_T,String(stateT));schedulePush();}
 function uid(){return Math.random().toString(36).slice(2,9)}
 function todayKey(d=new Date()){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
@@ -439,6 +462,51 @@ document.getElementById('btnCancelParsed').onclick=()=>{
 function resetToday(){ let tk=todayKey(); Object.keys(log).forEach(k=>{if(k.startsWith(tk+'|'))delete log[k]}); save(); renderToday(); toast('Отметки сброшены'); }
 function wipeAll(){ if(confirm('Удалить все лекарства и отметки?')){meds=[];log={};save();renderMeds();renderToday();toast('Очищено')} }
 
+/* ---------- СИНХРОНИЗАЦИЯ УСТРОЙСТВ ---------- */
+function setSync(s){let e=document.getElementById('syncState'); if(e){e.textContent=s; e.className='pill-state'+(s==='✓'?' on':'');}}
+async function rpc(fn,body){
+  const r=await fetch(SUPA_URL+'/rest/v1/rpc/'+fn,{method:'POST',
+    headers:{'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY},
+    body:JSON.stringify(body)});
+  if(!r.ok) throw new Error('http '+r.status);
+  let txt=await r.text(); return txt?JSON.parse(txt):null;
+}
+function schedulePush(){ if(!syncCode)return; clearTimeout(pushTimer); pushTimer=setTimeout(cloudPush,1200); }
+async function cloudPush(){
+  if(!syncCode)return;
+  try{ setSync('…'); await rpc('pill_save',{p_code:syncCode,p_data:{meds,log,_t:stateT}}); setSync('✓'); }
+  catch(e){ setSync('!'); }
+}
+async function cloudPull(silent){
+  if(!syncCode)return;
+  try{
+    if(!silent)setSync('…');
+    let d=await rpc('pill_load',{p_code:syncCode});
+    if(d && typeof d==='object'){
+      let ct=+d._t||0;
+      if(ct>stateT){
+        if(Array.isArray(d.meds))meds=d.meds;
+        if(d.log&&typeof d.log==='object')log=d.log;
+        stateT=ct;
+        localStorage.setItem(LS_MEDS,JSON.stringify(meds));
+        localStorage.setItem(LS_LOG,JSON.stringify(log));
+        localStorage.setItem(LS_T,String(stateT));
+        renderToday(); renderMeds();
+      } else if(stateT>ct){ cloudPush(); }
+    } else if(meds.length){ cloudPush(); }
+    setSync('✓');
+  }catch(e){ setSync('!'); }
+}
+function saveSyncCode(){
+  let v=document.getElementById('syncCodeInput').value.trim();
+  syncCode=v; localStorage.setItem(LS_CODE,syncCode);
+  if(v){ toast('Синхронизация подключена'); cloudPull(); } else { toast('Код очищен'); setSync('—'); }
+}
+function genCode(){
+  let c='pill-'+Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,6);
+  document.getElementById('syncCodeInput').value=c;
+}
+
 /* ---------- УВЕДОМЛЕНИЯ ---------- */
 function updNotifState(){
   let el=document.getElementById('notifState');
@@ -496,9 +564,10 @@ function setDate(){
 }
 setDate(); renderToday(); updNotifState();
 checkReminders();
+(function initSync(){let i=document.getElementById('syncCodeInput'); if(i)i.value=syncCode; if(syncCode){setSync('…'); cloudPull(true);} else setSync('—');})();
 setInterval(()=>{checkReminders();},30000);
 setInterval(()=>{let v=!document.getElementById('v-today').classList.contains('hidden');if(v)renderToday();},60000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){setDate();renderToday();checkReminders();}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){setDate();renderToday();checkReminders();if(syncCode)cloudPull(true);}});
 
 if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
 </script>
