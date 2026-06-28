@@ -253,7 +253,8 @@
 const LS_MEDS='pills.meds.v1', LS_LOG='pills.log.v1';
 let meds = load(LS_MEDS, []);
 let log  = load(LS_LOG, {});   // { 'YYYY-MM-DD|medId|HH:MM': true }
-let firedNotif = {};           // avoid duplicate notifications per session
+const LS_FIRED='pills.fired.v1';
+let firedNotif = load(LS_FIRED, {}); // {dateKey|medId|HH:MM:true} — persisted so a reload doesn't re-fire or forget
 let parsed = [];
 const LS_T='pills.t', LS_CODE='pills.sync.code';
 const SUPA_URL='https://ssjghfivizubznkrdgxi.supabase.co';
@@ -262,6 +263,8 @@ let stateT=+localStorage.getItem(LS_T)||0;
 let syncCode=localStorage.getItem(LS_CODE)||'';
 let pushTimer=null;
 const LS_AIKEY='pills.ai.key';
+// Публичный VAPID-ключ для Web Push (приватный — только на сервере)
+const VAPID_PUBLIC='BOmcmS3mCnjYqlLy9NNxeQ5nbzz9naDtJ-is2oGc2Uy1DuocvYnvsMxLXlLPj0ibvtsHIRiHGcSGYoJ0zL-5tTY';
 
 function load(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
 function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));stateT=Date.now();localStorage.setItem(LS_T,String(stateT));schedulePush();}
@@ -568,7 +571,8 @@ function updNotifState(){
 function askNotif(){
   if(!('Notification'in window)){toast('Это устройство не поддерживает уведомления');return}
   Notification.requestPermission().then(p=>{updNotifState();
-    if(p==='granted')toast('Уведомления включены'); else if(p==='denied')toast('Уведомления запрещены в настройках Safari');});
+    if(p==='granted'){toast('Уведомления включены');subscribeForPush().then(ok=>{if(ok)toast('Напоминания будут приходить даже при закрытом приложении');});}
+    else if(p==='denied')toast('Уведомления запрещены в настройках Safari');});
 }
 function testNotif(){
   if(Notification.permission!=='granted'){askNotif();return}
@@ -581,14 +585,62 @@ function showNotif(title,body){
     } else new Notification(title,{body,icon:'icon.svg'});
   }catch(e){ try{new Notification(title,{body})}catch(_){} }
 }
+
+/* ---------- WEB PUSH (напоминания при закрытом приложении) ---------- */
+function urlB64ToU8(s){
+  const pad='='.repeat((4-s.length%4)%4);
+  const b=(s+pad).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(b); const out=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);
+  return out;
+}
+function ensureSyncCode(){ // серверу нужен код, чтобы знать расписание этого устройства
+  if(syncCode)return syncCode;
+  syncCode='pill-'+Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,6);
+  localStorage.setItem(LS_CODE,syncCode);
+  let i=document.getElementById('syncCodeInput'); if(i)i.value=syncCode;
+  return syncCode;
+}
+async function subscribeForPush(){
+  if(!('serviceWorker'in navigator)||!('PushManager'in window))return false;
+  if(!('Notification'in window)||Notification.permission!=='granted')return false;
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub){
+      sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlB64ToU8(VAPID_PUBLIC)});
+    }
+    ensureSyncCode();
+    await cloudPush();              // расписание должно быть на сервере
+    const j=sub.toJSON()||{}; const keys=j.keys||{};
+    if(!keys.p256dh||!keys.auth)return false;
+    let tz='UTC'; try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';}catch(e){}
+    await rpc('pill_push_register',{p_code:syncCode,p_endpoint:sub.endpoint,
+      p_p256dh:keys.p256dh,p_auth:keys.auth,p_tz:tz,p_tzoff:new Date().getTimezoneOffset(),
+      p_ua:(navigator.userAgent||'').slice(0,200)});
+    return true;
+  }catch(e){ return false; }
+}
+function saveFired(){try{localStorage.setItem(LS_FIRED,JSON.stringify(firedNotif))}catch(e){}}
+function pruneFired(){ // храним только сегодняшние отметки, чтобы объект не рос
+  let tk=todayKey(), changed=false;
+  Object.keys(firedNotif).forEach(k=>{ if(!k.startsWith(tk+'|')){ delete firedNotif[k]; changed=true; } });
+  if(changed)saveFired();
+}
 function checkReminders(){
   if(!('Notification'in window)||Notification.permission!=='granted')return;
-  let nh=nowHM(), tk=todayKey();
+  let nh=nowHM();
+  pruneFired();
   dayRows().forEach(r=>{
-    let fk=tk+'|'+r.m.id+'|'+r.tm;
-    if(r.tm===nh && !log[r.key] && !firedNotif[fk]){
-      firedNotif[fk]=true;
-      showNotif('💊 Пора принять: '+r.m.name, (r.m.dose||'приём')+(r.m.note?' · '+r.m.note:''));
+    // напоминаем, если время приёма УЖЕ наступило (а не строго совпало с минутой),
+    // приём ещё не отмечен и о нём ещё не уведомляли в этой сессии/устройстве
+    if(r.tm<=nh && !log[r.key] && !firedNotif[r.key]){
+      firedNotif[r.key]=true; saveFired();
+      // приёмы, прошедшие больше 3 часов назад, помечаем тихо — не сыплем старыми
+      // напоминаниями при первом открытии приложения за день
+      if(hmDiff(nh,r.tm) <= 180){
+        showNotif('💊 Пора принять: '+r.m.name, (r.m.dose||'приём')+(r.m.note?' · '+r.m.note:''));
+      }
     }
   });
 }
@@ -614,6 +666,8 @@ function setDate(){
 }
 setDate(); renderToday(); updNotifState();
 checkReminders();
+// при старте обновляем подписку на push (часовой пояс/endpoint могли смениться)
+if('Notification'in window&&Notification.permission==='granted'){setTimeout(()=>subscribeForPush(),1500);}
 (function initSync(){let i=document.getElementById('syncCodeInput'); if(i)i.value=syncCode; if(syncCode){setSync('…'); cloudPull(true);} else setSync('—');})();
 (function initAi(){let a=document.getElementById('aiKeyInput'); if(a)a.value=localStorage.getItem(LS_AIKEY)||''; aiStateUpd();})();
 setInterval(()=>{checkReminders();},30000);

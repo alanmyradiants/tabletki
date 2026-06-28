@@ -1,4 +1,4 @@
-const CACHE='pills-v3';
+const CACHE='pills-v4';
 const ASSETS=['./','./index.html','./manifest.json','./icon.svg'];
 self.addEventListener('install',e=>{
   self.skipWaiting();
@@ -25,10 +25,22 @@ self.addEventListener('fetch',e=>{
     );
   }
 });
+// Web Push: сервер шлёт напоминание, даже когда приложение закрыто
+self.addEventListener('push',e=>{
+  let d={};
+  try{ d=e.data?e.data.json():{}; }
+  catch(_){ d={title:'💊 Напоминание', body:(e.data&&e.data.text&&e.data.text())||''}; }
+  const title=d.title||'💊 Напоминание';
+  e.waitUntil(self.registration.showNotification(title,{
+    body:d.body||'', icon:'icon.svg', badge:'icon.svg',
+    vibrate:[80,40,80], tag:d.tag, renotify:!!d.tag, data:{url:d.url||'./'}
+  }));
+});
 self.addEventListener('notificationclick',e=>{
   e.notification.close();
+  const url=(e.notification.data&&e.notification.data.url)||'./';
   e.waitUntil(clients.matchAll({type:'window'}).then(cl=>{
     for(const c of cl){if('focus'in c)return c.focus();}
-    if(clients.openWindow)return clients.openWindow('./');
+    if(clients.openWindow)return clients.openWindow(url);
   }));
 });
