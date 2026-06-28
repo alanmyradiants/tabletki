@@ -1,5 +1,6 @@
 // pill-push — отправляет Web Push напоминания о приёме лекарств.
-// Вызывается раз в минуту по cron (pg_cron -> pg_net) с заголовком x-pill-secret.
+// Обычный режим: вызывается раз в минуту по cron (POST + заголовок x-pill-secret).
+// Тест-режим: GET ?test=<test_token> — шлёт тестовый push на все подписки.
 import webpush from 'npm:web-push@3.6.7';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -36,20 +37,67 @@ function activeOn(m: any, dateKey: string) {
   return diff >= 0 && diff < m.days;
 }
 
+async function sendOne(supa: any, sub: any, payload: string) {
+  try {
+    await webpush.sendNotification(
+      { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+      payload, { TTL: 3600 },
+    );
+    return 'sent';
+  } catch (err: any) {
+    const sc = err?.statusCode;
+    if (sc === 404 || sc === 410) {
+      await supa.from('pill_push_sub').delete().eq('endpoint', sub.endpoint);
+      return 'removed';
+    }
+    console.error('push error', sc, err?.body || err?.message);
+    return 'error';
+  }
+}
+
 Deno.serve(async (req) => {
   const supa = createClient(SUPA_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
-  // конфиг (VAPID + секрет)
+  // конфиг (VAPID + секреты)
   const { data: cfgRows } = await supa.from('pill_config').select('k,v');
   const cfg: Record<string, string> = {};
   for (const r of cfgRows || []) cfg[r.k] = r.v;
 
+  webpush.setVapidDetails(cfg.vapid_subject || 'mailto:admin@example.com', cfg.vapid_public, cfg.vapid_private);
+
+  const url = new URL(req.url);
+  const testTok = url.searchParams.get('test');
+
+  // ----- ТЕСТ-РЕЖИМ: ?test=<test_token> -----
+  if (testTok) {
+    if (!cfg.test_token || testTok !== cfg.test_token) {
+      return new Response('forbidden', { status: 401 });
+    }
+    const codeFilter = url.searchParams.get('code');
+    let q = supa.from('pill_push_sub').select('*');
+    if (codeFilter) q = q.eq('code', codeFilter);
+    const { data: subs } = await q;
+    const payload = JSON.stringify({
+      title: '💊 Тест — напоминания работают',
+      body: 'Если видишь это на телефоне, push настроен правильно.',
+      tag: 'pill-test', url: './',
+    });
+    let sent = 0, removed = 0;
+    for (const sub of subs || []) {
+      const r = await sendOne(supa, sub, payload);
+      if (r === 'sent') sent++; else if (r === 'removed') removed++;
+    }
+    return new Response(
+      JSON.stringify({ ok: true, mode: 'test', subs: (subs || []).length, sent, removed }),
+      { headers: { 'content-type': 'application/json' } },
+    );
+  }
+
+  // ----- ОБЫЧНЫЙ РЕЖИМ (cron) -----
   const secret = req.headers.get('x-pill-secret') || '';
   if (!cfg.cron_secret || secret !== cfg.cron_secret) {
     return new Response('forbidden', { status: 401 });
   }
-
-  webpush.setVapidDetails(cfg.vapid_subject || 'mailto:admin@example.com', cfg.vapid_public, cfg.vapid_private);
 
   const { data: subs } = await supa.from('pill_push_sub').select('*');
   if (!subs || !subs.length) {
@@ -97,21 +145,8 @@ Deno.serve(async (req) => {
     for (const c of cands) {
       if (!fresh.has(c.sub.endpoint + '|' + c.fireKey)) continue;
       const payload = JSON.stringify({ title: c.title, body: c.body, tag: c.fireKey, url: './' });
-      try {
-        await webpush.sendNotification(
-          { endpoint: c.sub.endpoint, keys: { p256dh: c.sub.p256dh, auth: c.sub.auth } },
-          payload, { TTL: 3600 },
-        );
-        sent++;
-      } catch (err: any) {
-        const sc = err?.statusCode;
-        if (sc === 404 || sc === 410) { // подписка мертва — удаляем
-          await supa.from('pill_push_sub').delete().eq('endpoint', c.sub.endpoint);
-          removed++;
-        } else {
-          console.error('push error', sc, err?.body || err?.message);
-        }
-      }
+      const r = await sendOne(supa, c.sub, payload);
+      if (r === 'sent') sent++; else if (r === 'removed') removed++;
     }
   }
 
