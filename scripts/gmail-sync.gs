@@ -36,10 +36,15 @@ function syncLabs() {
     th.getMessages().forEach(function (m) {
       const atts = [];
       m.getAttachments({ includeInlineImages: false }).forEach(function (a) {
-        const mt = a.getContentType();
-        if (mt === 'application/pdf' || mt.indexOf('image/') === 0) {
-          atts.push({ filename: a.getName(), mimeType: mt, dataB64: Utilities.base64Encode(a.getBytes()) });
+        // Гемотест шлёт PDF с типом application/octet-stream — определяем по расширению.
+        const name = (a.getName() || '').toLowerCase();
+        const mt = a.getContentType() || '';
+        if (name.slice(-4) === '.pdf') {
+          atts.push({ filename: a.getName(), mimeType: 'application/pdf', dataB64: Utilities.base64Encode(a.getBytes()) });
+        } else if (mt.indexOf('image/') === 0 || /\.(jpe?g|png|webp|gif|heic)$/.test(name)) {
+          atts.push({ filename: a.getName(), mimeType: (mt.indexOf('image/') === 0 ? mt : 'image/jpeg'), dataB64: Utilities.base64Encode(a.getBytes()) });
         }
+        // .sig и прочее — пропускаем
       });
       messages.push({
         id: m.getId(),
