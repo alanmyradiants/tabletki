@@ -13,7 +13,9 @@
  * постепенно разберёт всю историю писем и будет подхватывать новые.
  */
 
-const ENDPOINT = 'https://ssjghfivizubznkrdgxi.supabase.co/functions/v1/lab-ingest';
+// Адрес приёмной. Функция задеплоена под слагом smooth-worker (имя по умолчанию
+// от Supabase — роли не играет, важен код внутри).
+const ENDPOINT = 'https://ssjghfivizubznkrdgxi.supabase.co/functions/v1/smooth-worker';
 const SECRET   = 'ВСТАВЬ_СЕКРЕТ_ИЗ_ЧАТА';
 const CODE     = 'ВСТАВЬ_КОД_СИНХРОНИЗАЦИИ_ИЗ_БОТА';
 
