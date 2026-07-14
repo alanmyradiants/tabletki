@@ -155,6 +155,7 @@
   .lab-dots .d{background:var(--card2);border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted)}
   .lab-dots .d b{color:var(--text)}
   .lab-txtcard{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .lab-divider{margin:20px 8px 10px;font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
 </style>
 </head>
 <body>
@@ -718,8 +719,22 @@ function renderLabs(){
   let groups={};
   labData.forEach(r=>{(groups[r.analyte_key]=groups[r.analyte_key]||[]).push(r);});
   let lastDate=rows=>{let ds=rows.map(r=>r.test_date).filter(Boolean).sort();return ds.length?Date.parse(ds[ds.length-1]):0;};
-  let keys=Object.keys(groups).sort((a,b)=>lastDate(groups[b])-lastDate(groups[a]));
-  c.innerHTML=keys.map(k=>labCard(groups[k])).join('');
+  let numPts=rows=>rows.filter(r=>r.value!=null&&r.test_date).length;
+  // показатели с динамикой (2+ замера, есть график) — наверх; единичные — вниз
+  let keys=Object.keys(groups).sort((a,b)=>{
+    let ma=numPts(groups[a])>=2?1:0, mb=numPts(groups[b])>=2?1:0;
+    if(ma!==mb)return mb-ma;
+    return lastDate(groups[b])-lastDate(groups[a]);
+  });
+  let html='', divShown=false;
+  keys.forEach(k=>{
+    if(!divShown && numPts(groups[k])<2 && keys.some(x=>numPts(groups[x])>=2)){
+      divShown=true;
+      html+='<div class="lab-divider">Единичные замеры · график появится после второго анализа</div>';
+    }
+    html+=labCard(groups[k]);
+  });
+  c.innerHTML=html;
 }
 
 function labCard(rows){
