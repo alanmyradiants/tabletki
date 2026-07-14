@@ -173,6 +173,10 @@
   .lab-table td.dt{color:var(--muted);font-size:13.5px;white-space:nowrap}
   .lab-table td.vv{text-align:right;font-weight:800}
   .lab-table td.vv.out{color:var(--red)}
+  .labcats{display:flex;gap:7px;overflow-x:auto;padding:8px 4px 2px;margin:0;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .labcats::-webkit-scrollbar{display:none}
+  .labcat{flex:0 0 auto;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:20px;padding:8px 14px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .labcat.on{background:var(--green);border-color:var(--green);color:#06231b}
 </style>
 </head>
 <body>
@@ -299,7 +303,8 @@
 
   <!-- LABS -->
   <section class="view hidden" id="v-labs">
-    <input type="text" id="labSearch" placeholder="🔎 Поиск показателя (напр. тестостерон)" autocapitalize="off" autocorrect="off" spellcheck="false" oninput="renderLabs()" style="margin:8px 4px 4px;width:calc(100% - 8px)">
+    <div id="labCats" class="labcats"></div>
+    <input type="text" id="labSearch" placeholder="🔎 Поиск показателя (напр. тестостерон)" autocapitalize="off" autocorrect="off" spellcheck="false" oninput="renderLabs()" style="margin:6px 4px 4px;width:calc(100% - 8px)">
     <div id="labCharts"></div>
   </section>
 </div>
@@ -332,6 +337,7 @@ const LS_AIKEY='pills.ai.key';
 const LS_LABS='pills.labs.v1';
 let labData=load(LS_LABS,[]);   // [{rid,test_date,analyte,analyte_key,value,value_text,unit,ref_low,ref_high,ref_text,source}]
 let labParsed=[];
+let labCat='Все';   // выбранная группа анализов на вкладке «Анализы»
 // Публичный VAPID-ключ для Web Push (приватный — только на сервере)
 const VAPID_PUBLIC='BOmcmS3mCnjYqlLy9NNxeQ5nbzz9naDtJ-is2oGc2Uy1DuocvYnvsMxLXlLPj0ibvtsHIRiHGcSGYoJ0zL-5tTY';
 
@@ -739,7 +745,31 @@ async function labDelete(rid){
   if(syncCode){try{await rpc('lab_delete',{p_code:syncCode,p_rid:rid});}catch(e){}}
 }
 
+// группа показателя по названию (эвристика по ключевым словам)
+const LAB_CATS=[
+  ['Гормоны',['тестостерон','эстрадиол','кортизол','ттг','т3','т4','лютеинизирующ','фолликулостимулирующ','пролактин','дга','гспг','глобулин связывающ','инсулин','с-пептид','прогестерон','паратгормон','соматотроп','антимюллеров','17-он','андроген','ат-тпо','ат-тг','тиреоглоб']],
+  ['Общий анализ крови',['гемоглобин','эритроцит','лейкоцит','тромбоцит','гематокрит','лимфоцит','моноцит','нейтрофил','эозинофил','базофил','соэ','mcv','mch','мснс','mchc','цветовой показатель','гранулоцит','средний объем','среднее содержание','средняя концентрац','ретикулоцит']],
+  ['Холестерин и липиды',['холестерин','лпнп','лпвп','лпонп','триглицерид','атерогенн','аполипопротеин','липопротеин']],
+  ['Витамины',['витамин','фолат','фолиев','b12','цианокобаламин']],
+  ['Биохимия',['алт','аст','аланинамин','аспартатамин','билирубин','креатинин','мочевин','мочевая кислота','общий белок','амилаза','гамма','фосфатаза','калий','натрий','хлорид','глюкоз','железо','ожсс','железосвяз','ферритин','пса','простатическ','альбумин','реактивн','гликирован']],
+];
+function labCategory(key){
+  for(let i=0;i<LAB_CATS.length;i++){let kws=LAB_CATS[i][1];for(let j=0;j<kws.length;j++){if(key.indexOf(kws[j])>=0)return LAB_CATS[i][0];}}
+  return 'Прочее';
+}
+function renderLabCats(){
+  let el=document.getElementById('labCats');if(!el)return;
+  let counts={},seen={};
+  labData.forEach(r=>{let c=labCategory(r.analyte_key),sk=c+'|'+r.analyte_key;if(!seen[sk]){seen[sk]=1;counts[c]=(counts[c]||0)+1;}});
+  let order=LAB_CATS.map(x=>x[0]).concat(['Прочее']);
+  let cats=['Все'].concat(order.filter(c=>counts[c]));
+  if(cats.indexOf(labCat)<0)labCat='Все';
+  el.innerHTML=cats.map(c=>'<button class="labcat'+(c===labCat?' on':'')+'" onclick="selectLabCat(\''+c.replace(/'/g,"\\'")+'\')">'+esc(c)+(c!=='Все'?' <span style="opacity:.6">'+counts[c]+'</span>':'')+'</button>').join('');
+}
+function selectLabCat(c){labCat=c;renderLabCats();renderLabs();}
+
 function renderLabs(){
+  renderLabCats();
   let c=document.getElementById('labCharts');if(!c)return;
   if(!labData.length){c.innerHTML='<div class="empty-state"><div class="em">📈</div><p>Пока нет анализов.<br>Открой «Добавить» → «Анализы» и загрузи бланк.</p></div>';return;}
   let groups={};
@@ -752,6 +782,8 @@ function renderLabs(){
     if(ma!==mb)return mb-ma;
     return lastDate(groups[b])-lastDate(groups[a]);
   });
+  // фильтр по группе
+  if(labCat&&labCat!=='Все')keys=keys.filter(k=>labCategory(k)===labCat);
   // поиск по названию показателя
   let si=document.getElementById('labSearch');
   let q=(si?si.value:'').toLowerCase().replace(/ё/g,'е').trim();
