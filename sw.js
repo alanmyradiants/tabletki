@@ -1,4 +1,4 @@
-const CACHE='pills-v4';
+const CACHE='pills-v5';
 const ASSETS=['./','./index.html','./manifest.json','./icon.svg'];
 self.addEventListener('install',e=>{
   self.skipWaiting();
