@@ -150,6 +150,10 @@
   .lab-sub{font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.5}
   .lab-sub .up{color:var(--red);font-weight:700}
   .lab-sub .down{color:var(--blue);font-weight:700}
+  .lab-badge{display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;vertical-align:middle}
+  .lab-badge.ok{background:#e7f7f0;color:var(--green-d)}
+  .lab-badge.hi{background:#fdecec;color:#d92d20}
+  .lab-badge.lo{background:#eef4ff;color:#2563eb}
   .lab-svg{width:100%;height:auto;display:block;margin-top:10px}
   .lab-dots{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
   .lab-dots .d{background:var(--card2);border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted)}
@@ -820,12 +824,21 @@ function renderLabs(){
   c.innerHTML=html;
 }
 
+// выбор нормы: самый свежий замер с ЧИСЛОВОЙ нормой (даже если в последнем
+// бланке норма записана словами «см. текст»); иначе — самый свежий текстовый референс.
+function pickRef(rows){
+  let byDate=rows.filter(r=>r.test_date).slice().sort((a,b)=>b.test_date.localeCompare(a.test_date));
+  let ordered=byDate.concat(rows.filter(r=>!r.test_date));
+  for(let r of ordered){if(r.ref_low!=null||r.ref_high!=null)return {refLow:r.ref_low,refHigh:r.ref_high,refText:(r.ref_text&&/\d/.test(r.ref_text))?r.ref_text:''};}
+  for(let r of ordered){if(r.ref_text)return {refLow:null,refHigh:null,refText:r.ref_text};}
+  return {refLow:null,refHigh:null,refText:''};
+}
+
 function labCard(rows,ck){
   ck=ck||rows[0].analyte_key;
   let name=canonName(ck,rows[0].analyte), unit=(rows.find(r=>r.unit)||{}).unit||'';
   let key=String(ck).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-  let refLow=null,refHigh=null,refText='';
-  for(let i=rows.length-1;i>=0;i--){if(rows[i].ref_low!=null||rows[i].ref_high!=null||rows[i].ref_text){refLow=rows[i].ref_low;refHigh=rows[i].ref_high;refText=rows[i].ref_text||'';break;}}
+  let rf=pickRef(rows),refLow=rf.refLow,refHigh=rf.refHigh,refText=rf.refText;
   let pts=rows.filter(r=>r.value!=null&&r.test_date).map(r=>({t:Date.parse(r.test_date+'T00:00:00'),v:r.value,d:r.test_date}));
   pts.sort((a,b)=>a.t-b.t);
   if(!pts.length){
@@ -835,8 +848,10 @@ function labCard(rows,ck){
       +'<div class="lab-last">'+esc(last.value_text)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div></div></div>';
   }
   let last=pts[pts.length-1];
-  let outOfRange=(refLow!=null&&last.v<refLow)||(refHigh!=null&&last.v>refHigh);
+  let hi=(refHigh!=null&&last.v>refHigh), lo=(refLow!=null&&last.v<refLow);
+  let outOfRange=hi||lo;
   let cls=outOfRange?'out':((refLow!=null||refHigh!=null)?'ok':'');
+  let badge=(refLow!=null||refHigh!=null)?'<span class="lab-badge '+(hi?'hi':(lo?'lo':'ok'))+'">'+(hi?'выше нормы':(lo?'ниже нормы':'в норме'))+'</span> ':'';
   let trend='';
   if(pts.length>=2){let dv=last.v-pts[pts.length-2].v;if(Math.abs(dv)>1e-9){trend=' · <span class="'+(dv>0?'up':'down')+'">'+(dv>0?'▲':'▼')+' '+fmtNum(Math.abs(dv))+'</span>';}}
   let refStr=refText?('Норма '+esc(refText)):(refLow!=null&&refHigh!=null?('Норма '+fmtNum(refLow)+'–'+fmtNum(refHigh)):(refHigh!=null?('Норма до '+fmtNum(refHigh)):(refLow!=null?('Норма от '+fmtNum(refLow)):'')));
@@ -845,7 +860,7 @@ function labCard(rows,ck){
   return '<div class="lab-card tap" onclick="openLabModal(\''+key+'\')">'
     +'<div class="lab-head"><div class="lab-name">'+esc(name)+'</div>'
     +'<div class="lab-last '+cls+'">'+fmtNum(last.v)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div></div>'
-    +'<div class="lab-sub">'+(refStr?refStr+' · ':'')+'посл.: '+fmtD2(last.d)+trend+'</div>'
+    +'<div class="lab-sub">'+badge+(refStr?refStr+' · ':'')+'посл.: '+fmtD2(last.d)+trend+'</div>'
     +svg
     +'<div class="lab-dots">'+dots+'</div></div>';
 }
@@ -864,8 +879,7 @@ function openLabModal(ck){
   let rows=labData.filter(r=>canonOf(r.analyte_key)===ck);
   if(!rows.length)return;
   let name=canonName(ck,rows[0].analyte), unit=(rows.find(r=>r.unit)||{}).unit||'';
-  let refLow=null,refHigh=null,refText='';
-  for(let i=rows.length-1;i>=0;i--){if(rows[i].ref_low!=null||rows[i].ref_high!=null||rows[i].ref_text){refLow=rows[i].ref_low;refHigh=rows[i].ref_high;refText=rows[i].ref_text||'';break;}}
+  let rf=pickRef(rows),refLow=rf.refLow,refHigh=rf.refHigh,refText=rf.refText;
   let pts=rows.filter(r=>r.value!=null&&r.test_date).map(r=>({t:Date.parse(r.test_date+'T00:00:00'),v:r.value,d:r.test_date})).sort((a,b)=>a.t-b.t);
   let refStr=refText?('Норма '+esc(refText)):(refLow!=null&&refHigh!=null?('Норма '+fmtNum(refLow)+'–'+fmtNum(refHigh)):(refHigh!=null?('Норма до '+fmtNum(refHigh)):(refLow!=null?('Норма от '+fmtNum(refLow)):'')));
   let all=rows.filter(r=>r.test_date).slice().sort((a,b)=>b.test_date.localeCompare(a.test_date));
@@ -873,12 +887,15 @@ function openLabModal(ck){
     let out=(refLow!=null&&r.value!=null&&r.value<refLow)||(refHigh!=null&&r.value!=null&&r.value>refHigh);
     return '<tr><td class="dt">'+fmtD2(r.test_date)+'</td><td class="vv '+(out?'out':'')+'">'+esc(r.value_text)+(unit?' <span style="color:var(--muted);font-weight:600">'+esc(unit)+'</span>':'')+'</td></tr>';
   }).join('');
+  let mlast=pts.length?pts[pts.length-1]:null;
+  let mhi=mlast&&refHigh!=null&&mlast.v>refHigh, mlo=mlast&&refLow!=null&&mlast.v<refLow;
+  let mbadge=(mlast&&(refLow!=null||refHigh!=null))?'<span class="lab-badge '+(mhi?'hi':(mlo?'lo':'ok'))+'">'+(mhi?'выше нормы':(mlo?'ниже нормы':'в норме'))+'</span> ':'';
   let chart=pts.length>=2?labChartSVG(pts,refLow,refHigh):'';
   document.getElementById('labModalInner').innerHTML=
     '<div class="labmodal-grab"></div>'
     +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">'
     +'<h2>'+esc(name)+'</h2><button class="close" onclick="closeLabModal()">✕</button></div>'
-    +(refStr?'<div class="lab-sub" style="margin:0 2px 8px">'+refStr+(unit?' '+esc(unit):'')+'</div>':'')
+    +((mbadge||refStr)?'<div class="lab-sub" style="margin:0 2px 10px">'+mbadge+(refStr?refStr+(unit?' '+esc(unit):''):'')+'</div>':'')
     +chart
     +'<table class="lab-table">'+rowsHtml+'</table>';
   document.getElementById('labModal').classList.add('show');
