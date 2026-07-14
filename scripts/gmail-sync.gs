@@ -17,8 +17,9 @@ const ENDPOINT = 'https://ssjghfivizubznkrdgxi.supabase.co/functions/v1/lab-inge
 const SECRET   = 'ВСТАВЬ_СЕКРЕТ_ИЗ_ЧАТА';
 const CODE     = 'ВСТАВЬ_КОД_СИНХРОНИЗАЦИИ_ИЗ_БОТА';
 
-// Какие письма считаем анализами. Уточним под реального отправителя Гемотеста.
-const QUERY = 'from:gemotest.ru OR from:gemotest OR subject:Гемотест OR Гемотест';
+// Письма от лаборатории Гемотест (отправитель info@gemotest.ru; срочные результаты
+// приходят отдельным письмом с того же домена). has:attachment — только с вложениями.
+const QUERY = 'from:gemotest.ru has:attachment';
 const LABEL = 'tabletki-обработано';
 const BATCH = 8; // писем за один запуск (защита от лимитов Apps Script)
 
