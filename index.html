@@ -156,6 +156,23 @@
   .lab-dots .d b{color:var(--text)}
   .lab-txtcard{display:flex;justify-content:space-between;align-items:center;gap:10px}
   .lab-divider{margin:20px 8px 10px;font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .addtoggle{display:flex;gap:6px;background:var(--card2);border-radius:14px;padding:5px;margin:6px 4px 14px}
+  .addtoggle button{flex:1;border:none;background:none;border-radius:10px;padding:11px;font-size:15px;font-weight:800;color:var(--muted);cursor:pointer;font-family:inherit}
+  .addtoggle button.on{background:var(--card);color:var(--text);box-shadow:0 1px 2px rgba(16,24,40,.08)}
+  #labSearch{font-size:16px}
+  .lab-card.tap{cursor:pointer}
+  .lab-card.tap:active{transform:scale(.995)}
+  .labmodal{position:fixed;inset:0;z-index:80;background:rgba(16,24,40,.45);display:none;align-items:flex-end;justify-content:center}
+  .labmodal.show{display:flex}
+  .labmodal-inner{background:var(--bg);width:100%;max-width:560px;max-height:88vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:8px 16px calc(20px + env(safe-area-inset-bottom))}
+  .labmodal-grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:6px auto 8px}
+  .labmodal h2{font-size:21px;font-weight:800}
+  .labmodal .close{background:var(--card2);border:none;border-radius:50%;width:34px;height:34px;font-size:15px;font-weight:800;color:var(--muted);cursor:pointer;flex:0 0 auto}
+  .lab-table{width:100%;border-collapse:collapse;margin-top:10px}
+  .lab-table td{padding:12px 6px;border-top:1px solid var(--line);font-size:15px;font-variant-numeric:tabular-nums}
+  .lab-table td.dt{color:var(--muted);font-size:13.5px;white-space:nowrap}
+  .lab-table td.vv{text-align:right;font-weight:800}
+  .lab-table td.vv.out{color:var(--red)}
 </style>
 </head>
 <body>
@@ -178,15 +195,35 @@
 
   <!-- ADD -->
   <section class="view hidden" id="v-add">
-    <label class="fld">Вставь текст с назначениями</label>
-    <textarea id="rawText" placeholder="Например:&#10;Парацетамол 1 таблетка 3 раза в день 5 дней&#10;Витамин D 2000 МЕ 1 раз в день утром&#10;Амоксициллин 500 мг каждые 8 часов 7 дней&#10;Капли в нос 2 капли 2 раза в день в 9:00 и 21:00"></textarea>
-    <div class="hint">Каждое лекарство — с новой строки. Приложение само определит дозу, сколько раз в день, время и длительность. Потом можно поправить вручную.</div>
-    <button class="btn green" id="btnParse">Разобрать текст →</button>
-    <div class="preview hidden" id="previewWrap">
-      <h3>Проверь и поправь — потом сохрани</h3>
-      <div id="parsedList"></div>
-      <button class="btn green" id="btnSaveParsed">Сохранить в график</button>
-      <button class="btn ghost" id="btnCancelParsed">Отмена</button>
+    <div class="addtoggle">
+      <button id="addtab-meds" class="on" onclick="setAddMode('meds')">💊 Лекарства</button>
+      <button id="addtab-labs" onclick="setAddMode('labs')">📈 Анализы</button>
+    </div>
+
+    <div id="add-meds">
+      <label class="fld">Вставь текст с назначениями</label>
+      <textarea id="rawText" placeholder="Например:&#10;Парацетамол 1 таблетка 3 раза в день 5 дней&#10;Витамин D 2000 МЕ 1 раз в день утром&#10;Амоксициллин 500 мг каждые 8 часов 7 дней&#10;Капли в нос 2 капли 2 раза в день в 9:00 и 21:00"></textarea>
+      <div class="hint">Каждое лекарство — с новой строки. Приложение само определит дозу, сколько раз в день, время и длительность. Потом можно поправить вручную.</div>
+      <button class="btn green" id="btnParse">Разобрать текст →</button>
+      <div class="preview hidden" id="previewWrap">
+        <h3>Проверь и поправь — потом сохрани</h3>
+        <div id="parsedList"></div>
+        <button class="btn green" id="btnSaveParsed">Сохранить в график</button>
+        <button class="btn ghost" id="btnCancelParsed">Отмена</button>
+      </div>
+    </div>
+
+    <div id="add-labs" class="hidden">
+      <div class="lab-intro" id="labKeyHint" style="display:none">
+        Чтобы разбирать анализы, добавь свой ключ Anthropic в разделе «Ещё» → «Умный разбор текста (ИИ)».
+      </div>
+      <label class="file-btn">📎 Выбрать PDF или фото бланка
+        <input type="file" id="labFile" accept="application/pdf,image/*">
+      </label>
+      <div class="hint" style="text-align:center;margin:10px 0 2px">или вставь текст результатов</div>
+      <textarea id="labText" placeholder="Гемоглобин 142 г/л (130–160)&#10;Ферритин 45 нг/мл (30–400)&#10;ТТГ 2.1 мкМЕ/мл (0.4–4.0)&#10;Дата: 12.05.2026" style="min-height:100px"></textarea>
+      <button class="btn green" id="btnLabParse">Разобрать анализ →</button>
+      <div id="labPreview" class="hidden" style="margin:12px 4px 4px"></div>
     </div>
   </section>
 
@@ -262,19 +299,7 @@
 
   <!-- LABS -->
   <section class="view hidden" id="v-labs">
-    <div class="lab-intro" id="labKeyHint" style="display:none">
-      Чтобы разбирать анализы, добавь свой ключ Anthropic в разделе «Ещё» → «Умный разбор текста (ИИ)».
-    </div>
-    <div class="card" style="margin-top:8px;padding:12px 12px 4px">
-      <label class="fld" style="margin:4px 4px 8px">Добавить анализ</label>
-      <label class="file-btn">📎 Выбрать PDF или фото бланка
-        <input type="file" id="labFile" accept="application/pdf,image/*">
-      </label>
-      <div class="hint" style="text-align:center;margin-bottom:2px">или вставь текст результатов</div>
-      <textarea id="labText" placeholder="Гемоглобин 142 г/л (130–160)&#10;Ферритин 45 нг/мл (30–400)&#10;ТТГ 2.1 мкМЕ/мл (0.4–4.0)&#10;Дата: 12.05.2026" style="min-height:100px"></textarea>
-      <button class="btn green" id="btnLabParse">Разобрать анализ →</button>
-      <div id="labPreview" class="hidden" style="margin:12px 4px 4px"></div>
-    </div>
+    <input type="text" id="labSearch" placeholder="🔎 Поиск показателя (напр. тестостерон)" autocapitalize="off" autocorrect="off" spellcheck="false" oninput="renderLabs()" style="margin:8px 4px 4px;width:calc(100% - 8px)">
     <div id="labCharts"></div>
   </section>
 </div>
@@ -288,6 +313,7 @@
 </nav>
 
 <div class="toast" id="toast"></div>
+<div id="labModal" class="labmodal" onclick="if(event.target===this)closeLabModal()"><div class="labmodal-inner" id="labModalInner"></div></div>
 
 <script>
 const LS_MEDS='pills.meds.v1', LS_LOG='pills.log.v1';
@@ -691,6 +717,7 @@ async function saveLabParsed(){
   if(syncCode&&added.length){try{await rpc('lab_save',{p_code:syncCode,p_rows:added});}catch(e){}}
   labParsed=[];document.getElementById('labText').value='';document.getElementById('labFile').value='';
   renderLabPreview();renderLabs();
+  if(added.length)go('labs');
 }
 
 async function labLoad(){
@@ -713,9 +740,8 @@ async function labDelete(rid){
 }
 
 function renderLabs(){
-  let hint=document.getElementById('labKeyHint');if(hint)hint.style.display=(localStorage.getItem(LS_AIKEY)?'none':'block');
   let c=document.getElementById('labCharts');if(!c)return;
-  if(!labData.length){c.innerHTML='<div class="empty-state"><div class="em">📈</div><p>Пока нет анализов.<br>Загрузи первый бланк выше — построю график по каждому показателю.</p></div>';return;}
+  if(!labData.length){c.innerHTML='<div class="empty-state"><div class="em">📈</div><p>Пока нет анализов.<br>Открой «Добавить» → «Анализы» и загрузи бланк.</p></div>';return;}
   let groups={};
   labData.forEach(r=>{(groups[r.analyte_key]=groups[r.analyte_key]||[]).push(r);});
   let lastDate=rows=>{let ds=rows.map(r=>r.test_date).filter(Boolean).sort();return ds.length?Date.parse(ds[ds.length-1]):0;};
@@ -726,6 +752,11 @@ function renderLabs(){
     if(ma!==mb)return mb-ma;
     return lastDate(groups[b])-lastDate(groups[a]);
   });
+  // поиск по названию показателя
+  let si=document.getElementById('labSearch');
+  let q=(si?si.value:'').toLowerCase().replace(/ё/g,'е').trim();
+  if(q)keys=keys.filter(k=>groups[k][0].analyte.toLowerCase().replace(/ё/g,'е').indexOf(q)>=0);
+  if(!keys.length){c.innerHTML='<div class="empty-state"><div class="em">🔎</div><p>Ничего не найдено.</p></div>';return;}
   let html='', divShown=false;
   keys.forEach(k=>{
     if(!divShown && numPts(groups[k])<2 && keys.some(x=>numPts(groups[x])>=2)){
@@ -739,13 +770,14 @@ function renderLabs(){
 
 function labCard(rows){
   let name=rows[0].analyte, unit=(rows.find(r=>r.unit)||{}).unit||'';
+  let key=(rows[0].analyte_key||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   let refLow=null,refHigh=null,refText='';
   for(let i=rows.length-1;i>=0;i--){if(rows[i].ref_low!=null||rows[i].ref_high!=null||rows[i].ref_text){refLow=rows[i].ref_low;refHigh=rows[i].ref_high;refText=rows[i].ref_text||'';break;}}
   let pts=rows.filter(r=>r.value!=null&&r.test_date).map(r=>({t:Date.parse(r.test_date+'T00:00:00'),v:r.value,d:r.test_date}));
   pts.sort((a,b)=>a.t-b.t);
   if(!pts.length){
     let last=rows[rows.length-1];
-    return '<div class="lab-card"><div class="lab-txtcard"><div><div class="lab-name">'+esc(name)+'</div>'
+    return '<div class="lab-card tap" onclick="openLabModal(\''+key+'\')"><div class="lab-txtcard"><div><div class="lab-name">'+esc(name)+'</div>'
       +'<div class="lab-sub">'+(last.test_date?fmtD2(last.test_date):'дата не указана')+'</div></div>'
       +'<div class="lab-last">'+esc(last.value_text)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div></div></div>';
   }
@@ -757,13 +789,48 @@ function labCard(rows){
   let refStr=refText?('Норма '+esc(refText)):(refLow!=null&&refHigh!=null?('Норма '+fmtNum(refLow)+'–'+fmtNum(refHigh)):(refHigh!=null?('Норма до '+fmtNum(refHigh)):(refLow!=null?('Норма от '+fmtNum(refLow)):'')));
   let svg=pts.length>=2?labChartSVG(pts,refLow,refHigh):'';
   let dots=pts.slice(-8).map(p=>'<span class="d">'+fmtD2(p.d).slice(0,5)+' <b>'+fmtNum(p.v)+'</b></span>').join('');
-  return '<div class="lab-card">'
+  return '<div class="lab-card tap" onclick="openLabModal(\''+key+'\')">'
     +'<div class="lab-head"><div class="lab-name">'+esc(name)+'</div>'
     +'<div class="lab-last '+cls+'">'+fmtNum(last.v)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div></div>'
     +'<div class="lab-sub">'+(refStr?refStr+' · ':'')+'посл.: '+fmtD2(last.d)+trend+'</div>'
     +svg
     +'<div class="lab-dots">'+dots+'</div></div>';
 }
+
+// переключатель в разделе «Добавить»: Лекарства / Анализы
+function setAddMode(m){
+  document.getElementById('add-meds').classList.toggle('hidden',m!=='meds');
+  document.getElementById('add-labs').classList.toggle('hidden',m!=='labs');
+  document.getElementById('addtab-meds').classList.toggle('on',m==='meds');
+  document.getElementById('addtab-labs').classList.toggle('on',m==='labs');
+  if(m==='labs'){let h=document.getElementById('labKeyHint');if(h)h.style.display=(localStorage.getItem(LS_AIKEY)?'none':'block');}
+}
+
+// детали показателя по тапу: полный график + все значения по датам
+function openLabModal(key){
+  let rows=labData.filter(r=>r.analyte_key===key);
+  if(!rows.length)return;
+  let name=rows[0].analyte, unit=(rows.find(r=>r.unit)||{}).unit||'';
+  let refLow=null,refHigh=null,refText='';
+  for(let i=rows.length-1;i>=0;i--){if(rows[i].ref_low!=null||rows[i].ref_high!=null||rows[i].ref_text){refLow=rows[i].ref_low;refHigh=rows[i].ref_high;refText=rows[i].ref_text||'';break;}}
+  let pts=rows.filter(r=>r.value!=null&&r.test_date).map(r=>({t:Date.parse(r.test_date+'T00:00:00'),v:r.value,d:r.test_date})).sort((a,b)=>a.t-b.t);
+  let refStr=refText?('Норма '+esc(refText)):(refLow!=null&&refHigh!=null?('Норма '+fmtNum(refLow)+'–'+fmtNum(refHigh)):(refHigh!=null?('Норма до '+fmtNum(refHigh)):(refLow!=null?('Норма от '+fmtNum(refLow)):'')));
+  let all=rows.filter(r=>r.test_date).slice().sort((a,b)=>b.test_date.localeCompare(a.test_date));
+  let rowsHtml=all.map(r=>{
+    let out=(refLow!=null&&r.value!=null&&r.value<refLow)||(refHigh!=null&&r.value!=null&&r.value>refHigh);
+    return '<tr><td class="dt">'+fmtD2(r.test_date)+'</td><td class="vv '+(out?'out':'')+'">'+esc(r.value_text)+(unit?' <span style="color:var(--muted);font-weight:600">'+esc(unit)+'</span>':'')+'</td></tr>';
+  }).join('');
+  let chart=pts.length>=2?labChartSVG(pts,refLow,refHigh):'';
+  document.getElementById('labModalInner').innerHTML=
+    '<div class="labmodal-grab"></div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">'
+    +'<h2>'+esc(name)+'</h2><button class="close" onclick="closeLabModal()">✕</button></div>'
+    +(refStr?'<div class="lab-sub" style="margin:0 2px 8px">'+refStr+(unit?' '+esc(unit):'')+'</div>':'')
+    +chart
+    +'<table class="lab-table">'+rowsHtml+'</table>';
+  document.getElementById('labModal').classList.add('show');
+}
+function closeLabModal(){document.getElementById('labModal').classList.remove('show');}
 
 function labChartSVG(pts,refLow,refHigh){
   let W=340,H=120,pl=6,pr=6,ptp=10,pb=14,iw=W-pl-pr,ih=H-ptp-pb;
