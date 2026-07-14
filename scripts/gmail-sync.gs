@@ -19,9 +19,10 @@ const ENDPOINT = 'https://ssjghfivizubznkrdgxi.supabase.co/functions/v1/smooth-w
 const SECRET   = 'ВСТАВЬ_СЕКРЕТ_ИЗ_ЧАТА';
 const CODE     = 'ВСТАВЬ_КОД_СИНХРОНИЗАЦИИ_ИЗ_БОТА';
 
-// Письма от лаборатории Гемотест (отправитель info@gemotest.ru; срочные результаты
-// приходят отдельным письмом с того же домена). has:attachment — только с вложениями.
-const QUERY = 'from:gemotest.ru has:attachment';
+// Только письма с результатами анализов от Гемотеста (отправитель info@gemotest.ru).
+// subject:анализов отсекает договоры/сметы/уведомления об оплате; ловит и обычные,
+// и «срочные» результаты (в теме всегда есть «анализов»).
+const QUERY = 'from:gemotest.ru subject:анализов has:attachment';
 const LABEL = 'tabletki-обработано';
 const BATCH = 8; // писем за один запуск (защита от лимитов Apps Script)
 
