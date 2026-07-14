@@ -135,6 +135,26 @@
   .settings-row .s{font-size:12.5px;color:var(--muted);margin-top:2px;max-width:230px;line-height:1.4}
   .pill-state{font-size:12px;font-weight:800;padding:5px 10px;border-radius:20px;background:var(--card2)}
   .pill-state.on{background:var(--green);color:#06231b}
+
+  /* ------- Анализы ------- */
+  .lab-intro{margin:8px 4px 4px;font-size:13px;color:var(--muted);line-height:1.5;background:var(--card2);border-radius:12px;padding:12px 14px}
+  .file-btn{display:block;background:var(--card2);color:var(--text);border:1px dashed var(--line);border-radius:14px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;text-align:center;margin:0}
+  .file-btn input{display:none}
+  .lab-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 14px 10px;margin:0 4px 12px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  .lab-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .lab-name{font-size:17px;font-weight:800;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .lab-last{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .lab-last small{font-size:13px;font-weight:700;color:var(--muted);margin-left:3px}
+  .lab-last.out{color:var(--red)}
+  .lab-last.ok{color:var(--green-d)}
+  .lab-sub{font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.5}
+  .lab-sub .up{color:var(--red);font-weight:700}
+  .lab-sub .down{color:var(--blue);font-weight:700}
+  .lab-svg{width:100%;height:auto;display:block;margin-top:10px}
+  .lab-dots{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .lab-dots .d{background:var(--card2);border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted)}
+  .lab-dots .d b{color:var(--text)}
+  .lab-txtcard{display:flex;justify-content:space-between;align-items:center;gap:10px}
 </style>
 </head>
 <body>
@@ -238,12 +258,31 @@
     </div>
     <div class="hint" style="text-align:center;margin-top:20px">Данные хранятся на этом устройстве, а с кодом — синхронизируются между устройствами. 💊</div>
   </section>
+
+  <!-- LABS -->
+  <section class="view hidden" id="v-labs">
+    <div class="lab-intro" id="labKeyHint" style="display:none">
+      Чтобы разбирать анализы, добавь свой ключ Anthropic в разделе «Ещё» → «Умный разбор текста (ИИ)».
+    </div>
+    <div class="card" style="margin-top:8px;padding:12px 12px 4px">
+      <label class="fld" style="margin:4px 4px 8px">Добавить анализ</label>
+      <label class="file-btn">📎 Выбрать PDF или фото бланка
+        <input type="file" id="labFile" accept="application/pdf,image/*">
+      </label>
+      <div class="hint" style="text-align:center;margin-bottom:2px">или вставь текст результатов</div>
+      <textarea id="labText" placeholder="Гемоглобин 142 г/л (130–160)&#10;Ферритин 45 нг/мл (30–400)&#10;ТТГ 2.1 мкМЕ/мл (0.4–4.0)&#10;Дата: 12.05.2026" style="min-height:100px"></textarea>
+      <button class="btn green" id="btnLabParse">Разобрать анализ →</button>
+      <div id="labPreview" class="hidden" style="margin:12px 4px 4px"></div>
+    </div>
+    <div id="labCharts"></div>
+  </section>
 </div>
 
 <nav>
   <button data-tab="today" class="active" onclick="go('today')"><span class="ic">📋</span>Сегодня</button>
   <button data-tab="meds" onclick="go('meds')"><span class="ic">💊</span>Лекарства</button>
   <button data-tab="add" onclick="go('add')"><span class="ic">➕</span>Добавить</button>
+  <button data-tab="labs" onclick="go('labs')"><span class="ic">📈</span>Анализы</button>
   <button data-tab="set" onclick="go('set')"><span class="ic">⚙️</span>Ещё</button>
 </nav>
 
@@ -263,6 +302,9 @@ let stateT=+localStorage.getItem(LS_T)||0;
 let syncCode=localStorage.getItem(LS_CODE)||'';
 let pushTimer=null;
 const LS_AIKEY='pills.ai.key';
+const LS_LABS='pills.labs.v1';
+let labData=load(LS_LABS,[]);   // [{rid,test_date,analyte,analyte_key,value,value_text,unit,ref_low,ref_high,ref_text,source}]
+let labParsed=[];
 // Публичный VAPID-ключ для Web Push (приватный — только на сервере)
 const VAPID_PUBLIC='BOmcmS3mCnjYqlLy9NNxeQ5nbzz9naDtJ-is2oGc2Uy1DuocvYnvsMxLXlLPj0ibvtsHIRiHGcSGYoJ0zL-5tTY';
 
@@ -560,6 +602,177 @@ async function aiParse(raw,key){
   }));
 }
 
+/* ---------- АНАЛИЗЫ (лаборатория) ---------- */
+// стабильный ключ дедупа (FNV-1a) — одинаковый бланк не задваивается
+function hashRid(s){let h=0x811c9dc5>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16).padStart(8,'0');}
+function normKey(name){return String(name||'').toLowerCase().replace(/ё/g,'е').replace(/[«»\.,;:()]/g,' ').replace(/\s+/g,' ').trim();}
+function labNum(x){if(x===null||x===undefined||x==='')return null;let v=typeof x==='number'?x:parseFloat(String(x).replace(',','.'));return isFinite(v)?v:null;}
+function fmtNum(v){if(v==null)return '';return String(Math.round(v*100)/100);}
+function fmtD2(iso){let m=String(iso||'').match(/(\d{4})-(\d{2})-(\d{2})/);return m?(m[3]+'.'+m[2]+'.'+m[1]):(iso||'');}
+function parseRuDate(s){let m=String(s).match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})/);if(!m)return null;let y=m[3].length===2?'20'+m[3]:m[3];return y+'-'+pad2(+m[2])+'-'+pad2(+m[1]);}
+function saveLabs(){try{localStorage.setItem(LS_LABS,JSON.stringify(labData));}catch(e){}}
+
+function labRow(o,source){
+  let name=String(o.analyte||'').trim()||'Показатель';
+  let val=labNum(o.value);
+  let vt=(o.value_text!=null&&o.value_text!=='')?String(o.value_text).trim():(val!=null?String(val):'');
+  let key=normKey(name);
+  let date=(o.test_date&&/^\d{4}-\d{2}-\d{2}$/.test(o.test_date))?o.test_date:null;
+  let rid=hashRid((date||'')+'|'+key+'|'+vt);
+  return {rid,test_date:date,analyte:name,analyte_key:key,value:val,value_text:vt,
+    unit:String(o.unit||'').trim(),ref_low:labNum(o.ref_low),ref_high:labNum(o.ref_high),
+    ref_text:String(o.ref_text||'').trim(),source:source||'manual'};
+}
+function addLabRows(rows){
+  let have=new Set(labData.map(r=>r.rid));let added=[];
+  rows.forEach(r=>{if(!have.has(r.rid)){have.add(r.rid);labData.push(r);added.push(r);}});
+  if(added.length)saveLabs();
+  return added;
+}
+function fileToB64(file){return new Promise((res,rej)=>{let fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]);fr.onerror=rej;fr.readAsDataURL(file);});}
+
+async function labExtract(blocks,key){
+  const sys="Ты извлекаешь результаты медицинских лабораторных анализов (например, лаборатория Гемотест) из текста, PDF или фото бланка. Верни СТРОГО JSON-массив без markdown и пояснений. Каждый элемент — один показатель: {\"test_date\":\"YYYY-MM-DD или null\",\"analyte\":\"название по-русски, напр. Гемоглобин\",\"value\":число или null,\"value_text\":\"значение как в бланке\",\"unit\":\"единицы или пустая строка\",\"ref_low\":число или null,\"ref_high\":число или null,\"ref_text\":\"референс как в бланке или пустая строка\"}. Правила: извлекай ВСЕ показатели с числовыми значениями. Десятичный разделитель — точка. test_date — дата взятия биоматериала (одна на бланк, если общая). Референс «до 5.0» → ref_high=5.0, ref_low=null; «> 1.03» → ref_low=1.03; «13.0 - 17.0» → ref_low=13.0, ref_high=17.0. Ничего не выдумывай. Отвечай только JSON-массивом.";
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+    headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:4096,temperature:0,system:sys,messages:[{role:'user',content:blocks}]})});
+  if(!r.ok){let t=await r.text().catch(()=>'');throw new Error('AI '+r.status+' '+t.slice(0,120));}
+  let j=await r.json();
+  let txt=(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('');
+  let mm=txt.match(/\[[\s\S]*\]/);if(!mm)throw new Error('no json');
+  let arr=JSON.parse(mm[0]);if(!Array.isArray(arr))throw new Error('not array');
+  return arr;
+}
+
+document.getElementById('btnLabParse').onclick=async ()=>{
+  let key=localStorage.getItem(LS_AIKEY)||'';
+  if(!key){toast('Сначала добавь ключ ИИ в «Ещё»');go('set');return;}
+  let file=document.getElementById('labFile').files[0];
+  let text=document.getElementById('labText').value.trim();
+  if(!file&&!text){toast('Загрузи бланк или вставь текст');return;}
+  let btn=document.getElementById('btnLabParse'),old=btn.textContent;btn.textContent='ИИ разбирает…';btn.disabled=true;
+  try{
+    let blocks=[];
+    if(file){
+      let b64=await fileToB64(file);
+      if(file.type==='application/pdf')blocks.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}});
+      else blocks.push({type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64}});
+    }
+    blocks.push({type:'text',text:(text?text+'\n\n':'')+'Извлеки все показатели из этого анализа как JSON-массив.'});
+    let arr=await labExtract(blocks,key);
+    labParsed=arr.map(o=>labRow(o,'manual')).filter(r=>r.value_text!=='');
+    if(!labParsed.length)toast('Показатели не найдены — проверь бланк');
+    renderLabPreview();
+  }catch(e){toast('Не удалось разобрать: '+e.message);}
+  btn.textContent=old;btn.disabled=false;
+};
+
+function renderLabPreview(){
+  let c=document.getElementById('labPreview');
+  if(!labParsed.length){c.classList.add('hidden');c.innerHTML='';return;}
+  let dates=[...new Set(labParsed.map(r=>r.test_date).filter(Boolean))];
+  c.classList.remove('hidden');
+  c.innerHTML='<h3 style="font-size:14px;color:var(--muted);margin:0 0 8px;font-weight:700">Нашёл показателей: '+labParsed.length+' '
+    +(dates.length?'· '+dates.map(fmtD2).join(', '):'· дата не распознана')+'</h3>'
+    +'<div class="lab-dots" style="margin-bottom:10px">'+labParsed.map(r=>'<span class="d"><b>'+esc(r.analyte)+'</b>: '+esc(r.value_text)+(r.unit?' '+esc(r.unit):'')+'</span>').join('')+'</div>'
+    +'<button class="btn green" onclick="saveLabParsed()">Сохранить в графики</button>'
+    +'<button class="btn ghost" onclick="cancelLabParsed()">Отмена</button>';
+}
+function cancelLabParsed(){labParsed=[];document.getElementById('labText').value='';document.getElementById('labFile').value='';renderLabPreview();}
+async function saveLabParsed(){
+  if(labParsed.some(r=>!r.test_date)){
+    let d=prompt('Дата анализа не распозналась. Введи дату (ДД.ММ.ГГГГ) для показателей без даты:','');
+    let iso=d?parseRuDate(d):null;
+    if(iso)labParsed.forEach(r=>{if(!r.test_date){r.test_date=iso;r.rid=hashRid(iso+'|'+r.analyte_key+'|'+r.value_text);}});
+  }
+  let added=addLabRows(labParsed);
+  toast(added.length?('Добавлено показателей: '+added.length):'Эти данные уже сохранены');
+  if(syncCode&&added.length){try{await rpc('lab_save',{p_code:syncCode,p_rows:added});}catch(e){}}
+  labParsed=[];document.getElementById('labText').value='';document.getElementById('labFile').value='';
+  renderLabPreview();renderLabs();
+}
+
+async function labLoad(){
+  if(!syncCode)return;
+  try{
+    let d=await rpc('lab_load',{p_code:syncCode});
+    if(!Array.isArray(d))return;
+    let have=new Set(labData.map(r=>r.rid)),ch=false;
+    d.forEach(r=>{if(!have.has(r.rid)){have.add(r.rid);labData.push({rid:r.rid,test_date:r.test_date,analyte:r.analyte,
+      analyte_key:r.analyte_key,value:r.value,value_text:r.value_text,unit:r.unit,ref_low:r.ref_low,ref_high:r.ref_high,
+      ref_text:r.ref_text,source:r.source});ch=true;}});
+    if(ch){saveLabs();renderLabs();}
+    let cloud=new Set(d.map(r=>r.rid)),up=labData.filter(r=>!cloud.has(r.rid));
+    if(up.length){try{await rpc('lab_save',{p_code:syncCode,p_rows:up});}catch(e){}}
+  }catch(e){}
+}
+async function labDelete(rid){
+  labData=labData.filter(r=>r.rid!==rid);saveLabs();renderLabs();
+  if(syncCode){try{await rpc('lab_delete',{p_code:syncCode,p_rid:rid});}catch(e){}}
+}
+
+function renderLabs(){
+  let hint=document.getElementById('labKeyHint');if(hint)hint.style.display=(localStorage.getItem(LS_AIKEY)?'none':'block');
+  let c=document.getElementById('labCharts');if(!c)return;
+  if(!labData.length){c.innerHTML='<div class="empty-state"><div class="em">📈</div><p>Пока нет анализов.<br>Загрузи первый бланк выше — построю график по каждому показателю.</p></div>';return;}
+  let groups={};
+  labData.forEach(r=>{(groups[r.analyte_key]=groups[r.analyte_key]||[]).push(r);});
+  let lastDate=rows=>{let ds=rows.map(r=>r.test_date).filter(Boolean).sort();return ds.length?Date.parse(ds[ds.length-1]):0;};
+  let keys=Object.keys(groups).sort((a,b)=>lastDate(groups[b])-lastDate(groups[a]));
+  c.innerHTML=keys.map(k=>labCard(groups[k])).join('');
+}
+
+function labCard(rows){
+  let name=rows[0].analyte, unit=(rows.find(r=>r.unit)||{}).unit||'';
+  let refLow=null,refHigh=null,refText='';
+  for(let i=rows.length-1;i>=0;i--){if(rows[i].ref_low!=null||rows[i].ref_high!=null||rows[i].ref_text){refLow=rows[i].ref_low;refHigh=rows[i].ref_high;refText=rows[i].ref_text||'';break;}}
+  let pts=rows.filter(r=>r.value!=null&&r.test_date).map(r=>({t:Date.parse(r.test_date+'T00:00:00'),v:r.value,d:r.test_date}));
+  pts.sort((a,b)=>a.t-b.t);
+  if(!pts.length){
+    let last=rows[rows.length-1];
+    return '<div class="lab-card"><div class="lab-txtcard"><div><div class="lab-name">'+esc(name)+'</div>'
+      +'<div class="lab-sub">'+(last.test_date?fmtD2(last.test_date):'дата не указана')+'</div></div>'
+      +'<div class="lab-last">'+esc(last.value_text)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div></div></div>';
+  }
+  let last=pts[pts.length-1];
+  let outOfRange=(refLow!=null&&last.v<refLow)||(refHigh!=null&&last.v>refHigh);
+  let cls=outOfRange?'out':((refLow!=null||refHigh!=null)?'ok':'');
+  let trend='';
+  if(pts.length>=2){let dv=last.v-pts[pts.length-2].v;if(Math.abs(dv)>1e-9){trend=' · <span class="'+(dv>0?'up':'down')+'">'+(dv>0?'▲':'▼')+' '+fmtNum(Math.abs(dv))+'</span>';}}
+  let refStr=refText?('Норма '+esc(refText)):(refLow!=null&&refHigh!=null?('Норма '+fmtNum(refLow)+'–'+fmtNum(refHigh)):(refHigh!=null?('Норма до '+fmtNum(refHigh)):(refLow!=null?('Норма от '+fmtNum(refLow)):'')));
+  let svg=pts.length>=2?labChartSVG(pts,refLow,refHigh):'';
+  let dots=pts.slice(-8).map(p=>'<span class="d">'+fmtD2(p.d).slice(0,5)+' <b>'+fmtNum(p.v)+'</b></span>').join('');
+  return '<div class="lab-card">'
+    +'<div class="lab-head"><div class="lab-name">'+esc(name)+'</div>'
+    +'<div class="lab-last '+cls+'">'+fmtNum(last.v)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div></div>'
+    +'<div class="lab-sub">'+(refStr?refStr+' · ':'')+'посл.: '+fmtD2(last.d)+trend+'</div>'
+    +svg
+    +'<div class="lab-dots">'+dots+'</div></div>';
+}
+
+function labChartSVG(pts,refLow,refHigh){
+  let W=340,H=120,pl=6,pr=6,ptp=10,pb=14,iw=W-pl-pr,ih=H-ptp-pb;
+  let ts=pts.map(p=>p.t),vs=pts.map(p=>p.v);
+  let tmin=Math.min(...ts),tmax=Math.max(...ts),vmin=Math.min(...vs),vmax=Math.max(...vs);
+  if(refLow!=null){vmin=Math.min(vmin,refLow);vmax=Math.max(vmax,refLow);}
+  if(refHigh!=null){vmin=Math.min(vmin,refHigh);vmax=Math.max(vmax,refHigh);}
+  let pad=(vmax-vmin)*0.14||Math.abs(vmax)*0.1||1;vmin-=pad;vmax+=pad;
+  let X=t=>tmax>tmin?pl+(t-tmin)/(tmax-tmin)*iw:pl+iw/2;
+  let Y=v=>ptp+(1-(v-vmin)/(vmax-vmin||1))*ih;
+  let s='<svg class="lab-svg" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg">';
+  if(refLow!=null||refHigh!=null){
+    let yTop=Y(refHigh!=null?refHigh:vmax),yBot=Y(refLow!=null?refLow:vmin);
+    s+='<rect x="'+pl+'" y="'+yTop.toFixed(1)+'" width="'+iw+'" height="'+Math.max(0,yBot-yTop).toFixed(1)+'" fill="#10b981" opacity="0.10"/>';
+    if(refHigh!=null)s+='<line x1="'+pl+'" y1="'+Y(refHigh).toFixed(1)+'" x2="'+(pl+iw)+'" y2="'+Y(refHigh).toFixed(1)+'" stroke="#10b981" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>';
+    if(refLow!=null)s+='<line x1="'+pl+'" y1="'+Y(refLow).toFixed(1)+'" x2="'+(pl+iw)+'" y2="'+Y(refLow).toFixed(1)+'" stroke="#10b981" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>';
+  }
+  let d=pts.map((p,i)=>(i?'L':'M')+X(p.t).toFixed(1)+' '+Y(p.v).toFixed(1)).join(' ');
+  s+='<path d="'+d+'" fill="none" stroke="#0c8f66" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+  pts.forEach(p=>{let out=(refLow!=null&&p.v<refLow)||(refHigh!=null&&p.v>refHigh);s+='<circle cx="'+X(p.t).toFixed(1)+'" cy="'+Y(p.v).toFixed(1)+'" r="3.4" fill="'+(out?'#ef4444':'#0c8f66')+'"/>';});
+  s+='</svg>';
+  return s;
+}
+
 /* ---------- УВЕДОМЛЕНИЯ ---------- */
 function updNotifState(){
   let el=document.getElementById('notifState');
@@ -646,14 +859,14 @@ function checkReminders(){
 }
 
 /* ---------- НАВИГАЦИЯ ---------- */
-const TITLES={today:'Сегодня',meds:'Лекарства',add:'Добавить',set:'Настройки'};
+const TITLES={today:'Сегодня',meds:'Лекарства',add:'Добавить',labs:'Анализы',set:'Настройки'};
 function go(tab){
-  ['today','meds','add','set'].forEach(t=>{
+  ['today','meds','add','labs','set'].forEach(t=>{
     document.getElementById('v-'+t).classList.toggle('hidden',t!==tab);
   });
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.getElementById('hTitle').textContent=TITLES[tab];
-  if(tab==='today')renderToday(); if(tab==='meds')renderMeds(); if(tab==='set'){updNotifState();aiStateUpd();}
+  if(tab==='today')renderToday(); if(tab==='meds')renderMeds(); if(tab==='labs'){renderLabs();labLoad();} if(tab==='set'){updNotifState();aiStateUpd();}
   window.scrollTo(0,0);
 }
 
@@ -668,7 +881,7 @@ setDate(); renderToday(); updNotifState();
 checkReminders();
 // при старте обновляем подписку на push (часовой пояс/endpoint могли смениться)
 if('Notification'in window&&Notification.permission==='granted'){setTimeout(()=>subscribeForPush(),1500);}
-(function initSync(){let i=document.getElementById('syncCodeInput'); if(i)i.value=syncCode; if(syncCode){setSync('…'); cloudPull(true);} else setSync('—');})();
+(function initSync(){let i=document.getElementById('syncCodeInput'); if(i)i.value=syncCode; if(syncCode){setSync('…'); cloudPull(true); labLoad();} else setSync('—');})();
 (function initAi(){let a=document.getElementById('aiKeyInput'); if(a)a.value=localStorage.getItem(LS_AIKEY)||''; aiStateUpd();})();
 setInterval(()=>{checkReminders();},30000);
 setInterval(()=>{let v=!document.getElementById('v-today').classList.contains('hidden');if(v)renderToday();},60000);
