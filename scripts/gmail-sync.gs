@@ -1,14 +1,14 @@
 /**
- * Tabletki — автосинхронизация анализов Гемотест из Gmail в бота.
+ * Tabletki — автосинхронизация анализов из Gmail в бота.
  *
  * НАСТРОЙКА (~5 минут):
  *  1. Открой https://script.google.com → «Новый проект».
  *  2. Вставь весь этот код.
  *  3. Заполни CODE (код синхронизации из бота: раздел «Ещё») и SECRET (дам в чате).
  *  4. Меню «Выполнить» → функция syncLabs → разреши доступ к Gmail (от своего имени).
- *  5. «Триггеры» (часы слева) → добавить триггер: syncLabs, «по времени», каждый час.
+ *  5. «Триггеры» (часы слева) → добавить триггер: syncLabs, «по времени», раз в день.
  *
- * Скрипт раз в час находит письма Гемотеста, отправляет их (текст + PDF/фото) в
+ * Скрипт находит письма лабораторий (SOURCES), отправляет их (текст + PDF/фото) в
  * приёмную бота, а обработанные помечает меткой, чтобы не слать повторно. Так он
  * постепенно разберёт всю историю писем и будет подхватывать новые.
  */
@@ -19,16 +19,28 @@ const ENDPOINT = 'https://ssjghfivizubznkrdgxi.supabase.co/functions/v1/smooth-w
 const SECRET   = 'ВСТАВЬ_СЕКРЕТ_ИЗ_ЧАТА';
 const CODE     = 'ВСТАВЬ_КОД_СИНХРОНИЗАЦИИ_ИЗ_БОТА';
 
-// Только письма с результатами анализов от Гемотеста (отправитель info@gemotest.ru).
-// subject:анализов отсекает договоры/сметы/уведомления об оплате; ловит и обычные,
-// и «срочные» результаты (в теме всегда есть «анализов»).
-const QUERY = 'from:gemotest.ru subject:анализов has:attachment';
+// Лаборатории (поисковые запросы Gmail). Чтобы добавить новую — впиши ещё строку.
+//  • Гемотест: subject:анализов отсекает договоры/сметы/уведомления об оплате.
+//  • МедЭлит: результаты от medelit83@mail.ru, фильтруем по отправителю.
+const SOURCES = [
+  'from:gemotest.ru subject:анализов has:attachment',
+  'from:medelit83@mail.ru has:attachment',
+];
 const LABEL = 'tabletki-обработано';
-const BATCH = 8; // писем за один запуск (защита от лимитов Apps Script)
+const BATCH = 8; // писем из каждого источника за один запуск (защита от лимитов Apps Script)
 
 function syncLabs() {
   const done = GmailApp.getUserLabelByName(LABEL) || GmailApp.createLabel(LABEL);
-  const threads = GmailApp.search(QUERY + ' -label:"' + LABEL + '"', 0, BATCH);
+
+  // собираем письма из всех источников, без дублей
+  const threads = [];
+  const seenThreads = {};
+  SOURCES.forEach(function (q) {
+    GmailApp.search(q + ' -label:"' + LABEL + '"', 0, BATCH).forEach(function (t) {
+      const id = t.getId();
+      if (!seenThreads[id]) { seenThreads[id] = true; threads.push(t); }
+    });
+  });
   if (!threads.length) { Logger.log('нет новых писем'); return; }
 
   const messages = [];
@@ -36,7 +48,7 @@ function syncLabs() {
     th.getMessages().forEach(function (m) {
       const atts = [];
       m.getAttachments({ includeInlineImages: false }).forEach(function (a) {
-        // Гемотест шлёт PDF с типом application/octet-stream — определяем по расширению.
+        // лаборатории шлют PDF с типом application/octet-stream — определяем по расширению.
         const name = (a.getName() || '').toLowerCase();
         const mt = a.getContentType() || '';
         if (name.slice(-4) === '.pdf') {
