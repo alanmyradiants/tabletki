@@ -745,6 +745,26 @@ async function labDelete(rid){
   if(syncCode){try{await rpc('lab_delete',{p_code:syncCode,p_rid:rid});}catch(e){}}
 }
 
+// склейка синонимов: один и тот же показатель под разными именами → один график.
+// НЕ объединяем разные показатели (свободный/общий тестостерон, %/абс. и т.п.).
+const LAB_CANON=[
+  {name:'Кортизол', keys:['кортизол','кортизол гормон стресса']},
+  {name:'Витамин B12', keys:['витамин b12 цианокобаламин','витамин в12']},
+  {name:'Витамин D (25-OH)', keys:['витамин d суммарный 25-oh d2 и d3','витамин d суммарный 25-oh d2 и d3 общий результат']},
+  {name:'Гамма-ГТ (ГГТ)', keys:['гамма-гт','гамма-глутаминтрансфераза ггт']},
+  {name:'ГСПГ (глобулин, связывающий половые гормоны)', keys:['глобулин связывающий половые гормоны','глобулин связывающий половые гормоны гспг']},
+  {name:'ЛГ (лютеинизирующий гормон)', keys:['лг','лютеинизирующий гормон лг']},
+  {name:'ФСГ (фолликулостимулирующий гормон)', keys:['фсг','фолликулостимулирующий гормон фсг']},
+  {name:'Общий ПСА', keys:['общий пса','общий пса простатический специфический антиген']},
+  {name:'МНО', keys:['мно','мно +птв и пти']},
+  {name:'Холестерин ЛПВП', keys:['холестерин-лпвп','холестерин липопротеинов высокой плотности лпвп']},
+  {name:'Антитела к ВИЧ 1/2 (скрининг)', keys:['антитела к вич 1/2 и антиген p24','ат к вич 1/2 и аг p24 скрининг кач']},
+];
+const CANON_MAP={};
+LAB_CANON.forEach(g=>{g.keys.forEach(k=>CANON_MAP[k]={ck:g.keys[0],name:g.name});});
+function canonOf(key){return CANON_MAP[key]?CANON_MAP[key].ck:key;}
+function canonName(ck,fallback){return CANON_MAP[ck]?CANON_MAP[ck].name:(fallback||'');}
+
 // группа показателя по названию (эвристика по ключевым словам)
 const LAB_CATS=[
   ['Гормоны',['тестостерон','эстрадиол','кортизол','ттг','т3','т4','лютеинизирующ','фолликулостимулирующ','пролактин','дга','гспг','глобулин связывающ','инсулин','с-пептид','прогестерон','паратгормон','соматотроп','антимюллеров','17-он','андроген','ат-тпо','ат-тг','тиреоглоб']],
@@ -760,7 +780,7 @@ function labCategory(key){
 function renderLabCats(){
   let el=document.getElementById('labCats');if(!el)return;
   let counts={},seen={};
-  labData.forEach(r=>{let c=labCategory(r.analyte_key),sk=c+'|'+r.analyte_key;if(!seen[sk]){seen[sk]=1;counts[c]=(counts[c]||0)+1;}});
+  labData.forEach(r=>{let ck=canonOf(r.analyte_key),c=labCategory(ck),sk=c+'|'+ck;if(!seen[sk]){seen[sk]=1;counts[c]=(counts[c]||0)+1;}});
   let order=LAB_CATS.map(x=>x[0]).concat(['Прочее']);
   let cats=['Все'].concat(order.filter(c=>counts[c]));
   if(cats.indexOf(labCat)<0)labCat='Все';
@@ -773,7 +793,7 @@ function renderLabs(){
   let c=document.getElementById('labCharts');if(!c)return;
   if(!labData.length){c.innerHTML='<div class="empty-state"><div class="em">📈</div><p>Пока нет анализов.<br>Открой «Добавить» → «Анализы» и загрузи бланк.</p></div>';return;}
   let groups={};
-  labData.forEach(r=>{(groups[r.analyte_key]=groups[r.analyte_key]||[]).push(r);});
+  labData.forEach(r=>{let ck=canonOf(r.analyte_key);(groups[ck]=groups[ck]||[]).push(r);});
   let lastDate=rows=>{let ds=rows.map(r=>r.test_date).filter(Boolean).sort();return ds.length?Date.parse(ds[ds.length-1]):0;};
   let numPts=rows=>rows.filter(r=>r.value!=null&&r.test_date).length;
   // показатели с динамикой (2+ замера, есть график) — наверх; единичные — вниз
@@ -795,14 +815,15 @@ function renderLabs(){
       divShown=true;
       html+='<div class="lab-divider">Единичные замеры · график появится после второго анализа</div>';
     }
-    html+=labCard(groups[k]);
+    html+=labCard(groups[k],k);
   });
   c.innerHTML=html;
 }
 
-function labCard(rows){
-  let name=rows[0].analyte, unit=(rows.find(r=>r.unit)||{}).unit||'';
-  let key=(rows[0].analyte_key||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+function labCard(rows,ck){
+  ck=ck||rows[0].analyte_key;
+  let name=canonName(ck,rows[0].analyte), unit=(rows.find(r=>r.unit)||{}).unit||'';
+  let key=String(ck).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   let refLow=null,refHigh=null,refText='';
   for(let i=rows.length-1;i>=0;i--){if(rows[i].ref_low!=null||rows[i].ref_high!=null||rows[i].ref_text){refLow=rows[i].ref_low;refHigh=rows[i].ref_high;refText=rows[i].ref_text||'';break;}}
   let pts=rows.filter(r=>r.value!=null&&r.test_date).map(r=>({t:Date.parse(r.test_date+'T00:00:00'),v:r.value,d:r.test_date}));
@@ -839,10 +860,10 @@ function setAddMode(m){
 }
 
 // детали показателя по тапу: полный график + все значения по датам
-function openLabModal(key){
-  let rows=labData.filter(r=>r.analyte_key===key);
+function openLabModal(ck){
+  let rows=labData.filter(r=>canonOf(r.analyte_key)===ck);
   if(!rows.length)return;
-  let name=rows[0].analyte, unit=(rows.find(r=>r.unit)||{}).unit||'';
+  let name=canonName(ck,rows[0].analyte), unit=(rows.find(r=>r.unit)||{}).unit||'';
   let refLow=null,refHigh=null,refText='';
   for(let i=rows.length-1;i>=0;i--){if(rows[i].ref_low!=null||rows[i].ref_high!=null||rows[i].ref_text){refLow=rows[i].ref_low;refHigh=rows[i].ref_high;refText=rows[i].ref_text||'';break;}}
   let pts=rows.filter(r=>r.value!=null&&r.test_date).map(r=>({t:Date.parse(r.test_date+'T00:00:00'),v:r.value,d:r.test_date})).sort((a,b)=>a.t-b.t);
