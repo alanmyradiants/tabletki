@@ -199,25 +199,26 @@
     padding:14px 16px;display:flex;align-items:center;gap:8px;font-family:inherit;font-size:14.5px;
     font-weight:700;color:var(--text);cursor:pointer;text-align:left}
   .calbar .sub{margin-left:auto;color:var(--muted);font-size:12.5px;white-space:nowrap}
-  .cal{margin:0 4px 14px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px}
+  .cal{margin:0 4px 14px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 10px}
   .calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
   .calhead b{font-size:15px;font-weight:800}
   .calnav{background:var(--card2);border:none;border-radius:10px;width:34px;height:34px;font-size:17px;
     color:var(--text);cursor:pointer;font-family:inherit}
-  .calgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;align-items:stretch}
-  .calgrid .wd{font-size:11px;color:var(--muted);text-align:center;font-weight:700;padding-bottom:2px}
-  .cell{aspect-ratio:1;min-width:0;overflow:hidden;border-radius:10px;border:1.5px solid transparent;
-    background:none;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:1px;font-family:inherit}
-  .cell .n{font-size:13px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
-  .cell .g{font-size:8px;font-weight:700;line-height:1;color:var(--muted);max-width:100%;
-    padding:0 1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .cell.plan{border-color:var(--green);cursor:pointer}
-  .cell.plan .g{color:var(--green-d)}
-  .cell.done{background:var(--green);border-color:var(--green);cursor:pointer}
-  .cell.done .n,.cell.done .g{color:#06231b}
-  .cell.today{box-shadow:0 0 0 2px var(--text) inset}
-  .cell.dim .n{color:var(--line)}
+  .calgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0}
+  .calgrid .wd{font-size:10.5px;color:var(--muted);text-align:center;font-weight:700;
+    padding-bottom:6px;letter-spacing:.3px}
+  .cell{border-top:1px solid var(--line);min-height:62px;min-width:0;overflow:hidden;background:none;
+    border-left:none;border-right:none;border-bottom:none;padding:0 2px 5px;font-family:inherit;
+    text-align:center;display:block;width:100%}
+  .cell .n{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin:8px 0 2px;
+    font-variant-numeric:tabular-nums}
+  .cell.today .n{width:24px;height:24px;border-radius:6px;background:var(--text);color:#ffffff;
+    font-weight:800;display:flex;align-items:center;justify-content:center;margin:5px auto 0}
+  .cell .g{display:block;margin:3px 1px 0;border-radius:5px;padding:2px 3px;font-size:8.5px;font-weight:700;
+    line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    background:#e7f7f0;color:var(--green-d)}
+  .cell.done .g{background:var(--green);color:#06231b}
+  .cell.has{cursor:pointer}
   .calnote{margin-top:10px;font-size:11.5px;color:var(--muted);line-height:1.4;text-align:center}
 
   .rules{margin:14px 6px 0;font-size:12.5px;color:var(--muted);line-height:1.6;
@@ -2154,16 +2155,16 @@ function calHTML(){
   let MON=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 
   let cells='';
-  for(let i=0;i<start;i++)cells+='<div class="cell dim"></div>';
+  for(let i=0;i<start;i++)cells+='<div class="cell"></div>';
   for(let n=1;n<=days;n++){
     let key=calMonth+'-'+pad2(n);
     let dd=done[key], pd=(!dd&&key>=tk)?plan[key]:null;
     let day=dd||pd||null;
-    let cls='cell'+(dd?' done':(pd?' plan':''))+(key===tk?' today':'');
+    let cls='cell'+(dd?' done':'')+(day?' has':'')+(key===tk?' today':'');
+    let inner='<span class="n">'+n+'</span>'+(day?'<span class="g">'+esc(gShort(day))+'</span>':'');
     cells+= day
-      ? '<button class="'+cls+'" onclick="calPick(\''+key+'\','+day+')">'
-        +'<span class="n">'+n+'</span><span class="g">'+esc(gShort(day))+'</span></button>'
-      : '<div class="'+cls+'"><span class="n">'+n+'</span></div>';
+      ? '<button class="'+cls+'" onclick="calPick(\''+key+'\','+day+')">'+inner+'</button>'
+      : '<div class="'+cls+'">'+inner+'</div>';
   }
   return bar
     +'<div class="cal">'
@@ -2171,9 +2172,9 @@ function calHTML(){
     +'<b>'+MON[fd.getMonth()]+' '+fd.getFullYear()+'</b>'
     +'<button class="calnav" onclick="calShift(1)">›</button></div>'
     +'<div class="calgrid">'
-    +['пн','вт','ср','чт','пт','сб','вс'].map(w=>'<div class="wd">'+w+'</div>').join('')
+    +['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС'].map(w=>'<div class="wd">'+w+'</div>').join('')
     +cells+'</div>'
-    +'<div class="calnote">зелёным — сделано, контуром — по плану; тап открывает тренировку</div></div>';
+    +'<div class="calnote">зелёным — сделано, светлым — по плану; тап открывает тренировку</div></div>';
 }
 
 /* ---------- НАВИГАЦИЯ ---------- */
@@ -2194,7 +2195,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 20:46 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 20:52 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
