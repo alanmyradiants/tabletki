@@ -1583,28 +1583,42 @@ function fitSkip(){ setFitCur(fitNext(fitCur)); toast('Следующая тре
 // первый кадр ролика — обложка ячейки, чтобы не грузить всё видео ради картинки
 function videoPoster(file){
   return new Promise(res=>{
-    let done=false, url='';
-    const fail=()=>{ if(done)return; done=true; if(url)URL.revokeObjectURL(url); res(null); };
+    let done=false, url='', v=null, ar=null;
+    const finish=(blob)=>{ if(done)return; done=true;
+      try{ if(v){v.pause(); v.removeAttribute('src'); v.load();} }catch(e){}
+      if(url)URL.revokeObjectURL(url);
+      res((blob||ar)?{blob:blob||null, ar:ar}:null);
+    };
+    const grab=()=>{
+      if(done||!v)return;
+      try{
+        let w=v.videoWidth, h=v.videoHeight;
+        if(!w||!h)return;
+        ar=w/h;
+        let k=Math.min(1,720/Math.max(w,h));
+        let c=document.createElement('canvas');
+        c.width=Math.round(w*k); c.height=Math.round(h*k);
+        c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+        c.toBlob(b=>finish(b),'image/jpeg',.72);
+      }catch(e){ finish(null); }
+    };
     try{
       url=URL.createObjectURL(file);
-      let v=document.createElement('video');
-      v.preload='metadata'; v.muted=true; v.playsInline=true; v.src=url;
-      setTimeout(fail,8000);
-      v.onerror=fail;
-      v.onloadeddata=()=>{ try{ v.currentTime=Math.min(.6,(v.duration||2)/3); }catch(e){ fail(); } };
-      v.onseeked=()=>{
-        if(done)return;
-        try{
-          let w=v.videoWidth, h=v.videoHeight;
-          if(!w||!h){ fail(); return; }
-          let k=Math.min(1,720/Math.max(w,h));
-          let c=document.createElement('canvas');
-          c.width=Math.round(w*k); c.height=Math.round(h*k);
-          c.getContext('2d').drawImage(v,0,0,c.width,c.height);
-          c.toBlob(b=>{ done=true; URL.revokeObjectURL(url); res(b?{blob:b,ar:w/h}:null); },'image/jpeg',.72);
-        }catch(e){ fail(); }
+      v=document.createElement('video');
+      v.preload='metadata'; v.muted=true; v.defaultMuted=true; v.playsInline=true;
+      v.setAttribute('muted',''); v.setAttribute('playsinline','');
+      v.src=url;
+      setTimeout(()=>finish(null),15000);
+      v.onerror=()=>finish(null);
+      v.onloadedmetadata=()=>{
+        if(v.videoWidth&&v.videoHeight)ar=v.videoWidth/v.videoHeight;
+        // Safari отдаёт кадр только после старта воспроизведения
+        let pr=v.play();
+        if(pr&&pr.catch)pr.catch(()=>{ try{ v.currentTime=.1; }catch(e){} });
       };
-    }catch(e){ fail(); }
+      v.ontimeupdate=()=>{ if(v.currentTime>0)grab(); };
+      v.onseeked=grab;
+    }catch(e){ finish(null); }
   });
 }
 async function storagePut(path,body,type){
@@ -1646,8 +1660,19 @@ function fitShowVideo(id){
   let w=workouts.find(x=>x.id===id); if(!w||!w.video)return;
   let ar=w.ar||1.777;
   box.innerHTML='<video class="exvideo" style="'+vtileStyle(ar,true)+'" src="'
-    +escAttr(w.video)+'" controls playsinline autoplay preload="auto"></video>';
-  let v=box.querySelector('video'); if(v)v.play().catch(()=>{});
+    +escAttr(w.video)+'" controls playsinline preload="metadata"></video>';
+  let v=box.querySelector('video'); if(!v)return;
+  v.onloadedmetadata=()=>{                       // пропорции берём у самого ролика
+    if(v.videoWidth&&v.videoHeight){
+      let a=Math.round(v.videoWidth/v.videoHeight*1000)/1000;
+      if(w.ar!==a){ w.ar=a; save(); v.style.cssText=vtileStyle(a,true); }
+    }
+  };
+  v.onerror=()=>{
+    let e=v.error, c=e?e.code:0;
+    toast(c===4?'Телефон не открывает этот формат видео':'Видео не загрузилось (код '+c+')');
+  };
+  let pr=v.play(); if(pr&&pr.catch)pr.catch(()=>{});   // не вышло — откроется по кнопке
 }
 
 function renderFitDays(){
@@ -1798,7 +1823,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 09:42 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 10:10 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
