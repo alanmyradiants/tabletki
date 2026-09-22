@@ -410,7 +410,8 @@
         <button class="btn sm danger" onclick="wipeFit()">Очистить</button>
       </div>
     </div>
-    <div class="hint" style="text-align:center;margin-top:20px">Данные хранятся на этом устройстве, а с кодом — синхронизируются между устройствами. 💊</div>
+    <div class="hint" style="text-align:center;margin-top:20px">Данные хранятся на этом устройстве, а с кодом — синхронизируются между устройствами. 💊<br>
+      <span id="appVer" style="opacity:.75"></span></div>
   </section>
 
   <!-- LABS -->
@@ -1794,6 +1795,8 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
+const APP_VER='22.09.2026 09:30 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+(function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
   let days=['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
