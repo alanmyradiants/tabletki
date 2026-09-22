@@ -118,6 +118,31 @@
   .row .tp{font-size:17px;flex:0 0 auto;margin-right:-6px}
   .sum{margin:12px 6px 0;font-size:13px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
 
+  /* ------- Тренировки ------- */
+  .ex{padding:14px 12px;border-radius:14px}
+  .ex+.ex{border-top:1px solid var(--line)}
+  .ex .top{display:flex;align-items:flex-start;gap:10px}
+  .ex .nm{font-size:17px;font-weight:700;flex:1;min-width:0}
+  .ex.done .nm{color:var(--muted);text-decoration:line-through}
+  .ex .meta{font-size:13px;color:var(--muted);margin-top:3px;line-height:1.5}
+  .ex .meta b{color:var(--text);font-variant-numeric:tabular-nums}
+  .setrow{display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap}
+  .setdot{width:36px;height:36px;border-radius:50%;border:2.5px solid var(--muted);background:none;
+    color:var(--muted);font-size:13px;font-weight:800;font-family:inherit;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;font-variant-numeric:tabular-nums}
+  .setdot.on{background:var(--green);border-color:var(--green);color:#06231b}
+  .wbox{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:13px;color:var(--muted);font-weight:700}
+  .wbox input{width:78px;text-align:center;padding:9px 6px;border-radius:11px;font-size:15px;font-weight:800;
+    -moz-appearance:textfield;appearance:textfield}
+  .wbox input::-webkit-outer-spin-button,.wbox input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .vbtn{background:var(--card2);border:none;border-radius:11px;padding:8px 11px;font-size:13px;font-weight:700;
+    color:var(--text);cursor:pointer;font-family:inherit;flex:0 0 auto;white-space:nowrap}
+  .exvideo{width:100%;margin-top:11px;border-radius:14px;background:#000;display:block}
+  .progress{font-size:13px;font-weight:800;padding:7px 11px;border-radius:11px;background:var(--card2);
+    color:var(--text);flex:0 0 auto;font-variant-numeric:tabular-nums}
+  .progress.done{background:var(--green);color:#06231b}
+  .labcat.dim{opacity:.45}
+
   /* tab bar */
   nav{
     position:fixed;bottom:0;left:0;right:0;background:rgba(255,255,255,.94);
@@ -170,8 +195,8 @@
   .lab-dots .d b{color:var(--text)}
   .lab-txtcard{display:flex;justify-content:space-between;align-items:center;gap:10px}
   .lab-divider{margin:20px 8px 10px;font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
-  .addtoggle{display:flex;gap:6px;background:var(--card2);border-radius:14px;padding:5px;margin:6px 4px 14px}
-  .addtoggle button{flex:1;border:none;background:none;border-radius:10px;padding:11px 4px;font-size:14px;font-weight:800;color:var(--muted);cursor:pointer;font-family:inherit;white-space:nowrap}
+  .addtoggle{display:flex;flex-wrap:wrap;gap:6px;background:var(--card2);border-radius:14px;padding:5px;margin:6px 4px 14px}
+  .addtoggle button{flex:1 1 45%;border:none;background:none;border-radius:10px;padding:11px 4px;font-size:14px;font-weight:800;color:var(--muted);cursor:pointer;font-family:inherit;white-space:nowrap}
   .addtoggle button.on{background:var(--card);color:var(--text);box-shadow:0 1px 2px rgba(16,24,40,.08)}
   #labSearch{font-size:16px}
   .lab-card.tap{cursor:pointer}
@@ -217,6 +242,7 @@
     <div class="addtoggle">
       <button id="addtab-meds" class="on" onclick="setAddMode('meds')">💊 Лекарства</button>
       <button id="addtab-food" onclick="setAddMode('food')">🥗 Питание</button>
+      <button id="addtab-fit" onclick="setAddMode('fit')">🏋️ Тренировки</button>
       <button id="addtab-labs" onclick="setAddMode('labs')">📈 Анализы</button>
     </div>
 
@@ -243,6 +269,19 @@
         <div id="foodParsedList"></div>
         <button class="btn green" id="btnSaveFoodParsed">Сохранить в меню</button>
         <button class="btn ghost" id="btnCancelFoodParsed">Отмена</button>
+      </div>
+    </div>
+
+    <div id="add-fit" class="hidden">
+      <label class="fld">Вставь план тренировок на неделю</label>
+      <textarea id="fitText" placeholder="Например:&#10;ПОНЕДЕЛЬНИК — ГРУДЬ&#10;Жим лёжа 4х10 60 кг&#10;Разводка гантелей 3х12 16 кг&#10;Отжимания на брусьях 3х макс&#10;&#10;СРЕДА — НОГИ&#10;Приседания 4х8 80 кг&#10;Выпады 3х12&#10;…" style="min-height:170px"></textarea>
+      <div class="hint">День недели и группа мышц — одной строкой: «ПОНЕДЕЛЬНИК — ГРУДЬ». Дальше упражнения, каждое с новой строки: название, подходы×повторы и рабочий вес, если знаешь. Строка без подходов («Кардио 20 минут») станет просто отметкой. Видео к упражнению добавишь потом на вкладке «Тренировки».</div>
+      <button class="btn green" id="btnFitParse">Разобрать план →</button>
+      <div class="preview hidden" id="fitPreviewWrap">
+        <h3>Проверь и поправь — потом сохрани</h3>
+        <div id="fitParsedList"></div>
+        <button class="btn green" id="btnSaveFitParsed">Сохранить план</button>
+        <button class="btn ghost" id="btnCancelFitParsed">Отмена</button>
       </div>
     </div>
 
@@ -349,6 +388,13 @@
         </div>
         <button class="btn sm danger" onclick="wipeFood()">Очистить</button>
       </div>
+      <div class="settings-row">
+        <div>
+          <div class="t">Удалить план тренировок</div>
+          <div class="s">Убрать все упражнения и отметки подходов. Загруженные видео останутся в облаке.</div>
+        </div>
+        <button class="btn sm danger" onclick="wipeFit()">Очистить</button>
+      </div>
     </div>
     <div class="hint" style="text-align:center;margin-top:20px">Данные хранятся на этом устройстве, а с кодом — синхронизируются между устройствами. 💊</div>
   </section>
@@ -361,9 +407,12 @@
     <div id="labCharts"></div>
   </section>
 
-  <!-- WORKOUTS (заготовка: наполним, когда решим, что показывать) -->
+  <!-- WORKOUTS -->
   <section class="view hidden" id="v-fit">
+    <div id="fitDays" class="labcats"></div>
+    <div id="fitBanner"></div>
     <div id="fitList"></div>
+    <input type="file" id="fitVideoFile" accept="video/*" style="display:none" onchange="fitVideoPicked(this)">
   </section>
 
   <!-- FOOD -->
@@ -402,6 +451,10 @@ const LS_AIKEY='pills.ai.key';
 const LS_LABS='pills.labs.v1';
 let labData=load(LS_LABS,[]);   // [{rid,test_date,analyte,analyte_key,value,value_text,unit,ref_low,ref_high,ref_text,source}]
 let labParsed=[];
+const LS_FIT='pills.fit.v1', LS_FITLOG='pills.fitlog.v1';
+let workouts=load(LS_FIT,[]);   // [{id,day,group,name,sets,reps,weight,time,video}]
+let fitLog=load(LS_FITLOG,{});  // {'YYYY-MM-DD|wid':{s:[0,1,..],w:60}}
+let fitParsed=[], fitVideoTarget='';
 const LS_FOOD='pills.food.v1';
 let meals=load(LS_FOOD,[]);     // [{id,time,name,items,kcal}] — приёмы пищи на день
 let foodParsed=[];
@@ -410,7 +463,7 @@ let labCat='Все';   // выбранная группа анализов на 
 const VAPID_PUBLIC='BOmcmS3mCnjYqlLy9NNxeQ5nbzz9naDtJ-is2oGc2Uy1DuocvYnvsMxLXlLPj0ibvtsHIRiHGcSGYoJ0zL-5tTY';
 
 function load(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
-function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));localStorage.setItem(LS_FOOD,JSON.stringify(meals));stateT=Date.now();localStorage.setItem(LS_T,String(stateT));schedulePush();}
+function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));localStorage.setItem(LS_FOOD,JSON.stringify(meals));localStorage.setItem(LS_FIT,JSON.stringify(workouts));localStorage.setItem(LS_FITLOG,JSON.stringify(fitLog));stateT=Date.now();localStorage.setItem(LS_T,String(stateT));schedulePush();}
 function uid(){return Math.random().toString(36).slice(2,9)}
 function todayKey(d=new Date()){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
@@ -527,6 +580,13 @@ function todayRows(){   // лекарства и приёмы пищи впер�
     name:r.m.name, sub:(r.m.dose||'приём')+(r.m.note?' · '+r.m.note:'')}));
   foodRows(new Date().getDay()).forEach(r=>rows.push({type:'food',tm:r.tm,key:r.key,ic:'🥗',
     name:r.f.name, sub:(r.f.items||'')+(r.f.kcal?(r.f.items?' · ':'')+r.f.kcal+' ккал':'')}));
+  let fit=fitRows(new Date().getDay());
+  if(fit.length){
+    let done=fit.filter(w=>exDone(w)).length;
+    rows.push({type:'fit',tm:fit[0].time||'18:00',key:'',ic:'🏋️',
+      name:'Тренировка'+(fit[0].group?' — '+fit[0].group:''),
+      sub:plEx(fit.length)+(done?' · сделано '+done:''), done:done, total:fit.length});
+  }
   rows.sort((a,b)=>a.tm.localeCompare(b.tm)||a.type.localeCompare(b.type));
   return rows;
 }
@@ -556,6 +616,16 @@ function renderToday(){
     let dn=!!log[r.key];
     let cls=''; if(r.tm<nh && !dn)cls='past';
     let diff=hmDiff(r.tm,nh); if(!dn && diff>=0 && diff<=60)cls='soon';
+    if(r.type==='fit'){
+      let full=r.done>=r.total;
+      return `<div class="row" onclick="go('fit')" style="cursor:pointer">
+        <div class="progress ${full?'done':''}">${r.done}/${r.total}</div>
+        <span class="tp">${r.ic}</span>
+        <div class="info"><div class="nm">${esc(r.name)}</div>
+          <div class="ds">${esc(r.sub)}</div></div>
+        <div class="time ${cls}">${r.tm}</div>
+      </div>`;
+    }
     return `<div class="row ${dn?'done':''}">
       <div class="check ${dn?'done':''}" onclick="toggle('${r.key}')">${dn?'✓':''}</div>
       <span class="tp">${r.ic}</span>
@@ -662,9 +732,33 @@ document.getElementById('btnCancelFoodParsed').onclick=()=>{
   foodParsed=[];document.getElementById('foodPreviewWrap').classList.add('hidden');
 };
 
+document.getElementById('btnFitParse').onclick=()=>{
+  let raw=document.getElementById('fitText').value;
+  if(!raw.trim()){toast('Сначала вставь план');return}
+  fitParsed=parseFit(raw);
+  if(!fitParsed.length){toast('Не удалось разобрать');return}
+  document.getElementById('fitPreviewWrap').classList.remove('hidden');
+  renderFitParsed();
+  document.getElementById('fitPreviewWrap').scrollIntoView({behavior:'smooth'});
+};
+document.getElementById('btnSaveFitParsed').onclick=()=>{
+  fitParsed.forEach(w=>{ if(!w.name)w.name='Упражнение'; if(!w.time)w.time='18:00'; });
+  let days=[...new Set(fitParsed.filter(w=>w.day!==null&&w.day!==undefined).map(w=>w.day))];
+  if(days.length) workouts=workouts.filter(w=>!(w.day!==null&&w.day!==undefined&&days.indexOf(w.day)>=0));
+  workouts=workouts.concat(fitParsed); fitParsed=[];
+  save(); fitDay=new Date().getDay(); renderFit(); renderToday();
+  document.getElementById('fitText').value='';
+  document.getElementById('fitPreviewWrap').classList.add('hidden');
+  toast('План сохранён ✓'); go('fit');
+};
+document.getElementById('btnCancelFitParsed').onclick=()=>{
+  fitParsed=[];document.getElementById('fitPreviewWrap').classList.add('hidden');
+};
+
 function resetToday(){ let tk=todayKey(); Object.keys(log).forEach(k=>{if(k.startsWith(tk+'|'))delete log[k]}); save(); renderToday(); toast('Отметки сброшены'); }
 function wipeAll(){ if(confirm('Удалить все лекарства и отметки?')){meds=[];log={};save();renderMeds();renderToday();renderFood();toast('Очищено')} }
 function wipeFood(){ if(confirm('Удалить все приёмы пищи?')){meals=[];save();renderFood();renderToday();toast('Меню очищено')} }
+function wipeFit(){ if(confirm('Удалить план тренировок и отметки подходов?')){workouts=[];fitLog={};save();renderFit();renderToday();toast('План очищен')} }
 
 /* ---------- СИНХРОНИЗАЦИЯ УСТРОЙСТВ ---------- */
 function setSync(s){let e=document.getElementById('syncState'); if(e){e.textContent=s; e.className='pill-state'+(s==='✓'?' on':'');}}
@@ -678,7 +772,7 @@ async function rpc(fn,body){
 function schedulePush(){ if(!syncCode)return; clearTimeout(pushTimer); pushTimer=setTimeout(cloudPush,1200); }
 async function cloudPush(){
   if(!syncCode)return;
-  try{ setSync('…'); await rpc('pill_save',{p_code:syncCode,p_data:{meds,meals,log,_t:stateT}}); setSync('✓'); }
+  try{ setSync('…'); await rpc('pill_save',{p_code:syncCode,p_data:{meds,meals,workouts,log,fitLog,_t:stateT}}); setSync('✓'); }
   catch(e){ setSync('!'); }
 }
 async function cloudPull(silent){
@@ -691,15 +785,19 @@ async function cloudPull(silent){
       if(ct>stateT){
         if(Array.isArray(d.meds))meds=d.meds;
         if(Array.isArray(d.meals))meals=d.meals;
+        if(Array.isArray(d.workouts))workouts=d.workouts;
+        if(d.fitLog&&typeof d.fitLog==='object')fitLog=d.fitLog;
         if(d.log&&typeof d.log==='object')log=d.log;
         stateT=ct;
         localStorage.setItem(LS_MEDS,JSON.stringify(meds));
         localStorage.setItem(LS_FOOD,JSON.stringify(meals));
+        localStorage.setItem(LS_FIT,JSON.stringify(workouts));
+        localStorage.setItem(LS_FITLOG,JSON.stringify(fitLog));
         localStorage.setItem(LS_LOG,JSON.stringify(log));
         localStorage.setItem(LS_T,String(stateT));
-        renderToday(); renderMeds(); renderFood();
+        renderToday(); renderMeds(); renderFood(); renderFit();
       } else if(stateT>ct){ cloudPush(); }
-    } else if(meds.length||meals.length){ cloudPush(); }
+    } else if(meds.length||meals.length||workouts.length){ cloudPush(); }
     setSync('✓');
   }catch(e){ setSync('!'); }
 }
@@ -966,7 +1064,7 @@ function labCard(rows,ck){
 
 // переключатель в разделе «Добавить»: Лекарства / Питание / Анализы
 function setAddMode(m){
-  ['meds','food','labs'].forEach(k=>{
+  ['meds','food','fit','labs'].forEach(k=>{
     document.getElementById('add-'+k).classList.toggle('hidden',k!==m);
     document.getElementById('addtab-'+k).classList.toggle('on',k===m);
   });
@@ -1278,20 +1376,225 @@ function renderFoodParsed(){
   }).join('');
 }
 
-/* ---------- ТРЕНИРОВКИ (заготовка) ----------
-   Раздел уже в меню и открывается. Чтобы наполнить его, нужны четыре вещи —
-   ровно как сделано для питания:
-     1) хранилище:      const LS_FIT='pills.fit.v1'; let workouts=load(LS_FIT,[]);
-     2) разбор текста:  parseFitLine() — по образцу parseFoodLine();
-     3) отрисовка:      renderFit() ниже + строки в todayRows();
-     4) синхронизация:  workouts в save(), cloudPush() и cloudPull().            */
+/* ---------- ТРЕНИРОВКИ ---------- */
+const MUSCLES=['грудь','спина','ноги','бицепс','трицепс','плечи','пресс','руки','ягодицы','кардио',
+  'всё тело','все тело','верх','низ','спина и бицепс','грудь и трицепс','плечи и руки'];
+let fitDay=new Date().getDay();
+
+function muscleOf(t){          // строка целиком = группа мышц
+  let v=lc(t).replace(/[\s:.,!–—-]+$/,'').trim();
+  return MUSCLES.indexOf(v)>=0 ? v.charAt(0).toUpperCase()+v.slice(1) : null;
+}
+function parseFit(raw){
+  let out=[], day=null, group='', time='';
+  String(raw||'').split(/\r?\n/).forEach(ln=>{
+    let t=ln.trim(); if(!t)return;
+    // «ПОНЕДЕЛЬНИК — ГРУДЬ 18:00»
+    let head=t.split(/\s*[—–:-]\s*/);
+    let d=dayHeader(head[0]);
+    if(d!==null){
+      day=d; group=''; time='';
+      let rest=t.slice(head[0].length).replace(/^[\s—–:-]+/,'').trim();
+      let mt=rest.match(/([0-2]?\d)[:.]([0-5]\d)(?!\d)/);
+      if(mt){ time=pad2(+mt[1])+':'+mt[2]; rest=(rest.slice(0,mt.index)+' '+rest.slice(mt.index+mt[0].length)).trim(); }
+      let g=muscleOf(rest); if(g)group=g; else if(rest)group=rest.charAt(0).toUpperCase()+rest.slice(1);
+      return;
+    }
+    let g=muscleOf(t); if(g){ group=g; return; }        // строка только с группой мышц
+    let e={s:cleanEdges(t), sets:0, reps:'', weight:null};
+    let mt=e.s.match(/(^|[\s(\[])([0-2]?\d)[:.]([0-5]\d)(?!\d)/);
+    let etime='';
+    if(mt){ etime=pad2(+mt[2])+':'+mt[3]; e.s=(e.s.slice(0,mt.index)+' '+e.s.slice(mt.index+mt[0].length)).trim(); }
+    let mw=e.s.match(/(\d+(?:[.,]\d+)?)\s*(?:кг|kg)(?![а-яё])/i);
+    if(mw){ e.weight=parseFloat(mw[1].replace(',','.')); e.s=(e.s.slice(0,mw.index)+' '+e.s.slice(mw.index+mw[0].length)).trim(); }
+    // 4х10 / 4 х 10 / 4x12 / 3×макс / «3 подхода по 12»
+    let ms=e.s.match(/(\d{1,2})\s*[хx×*]\s*([0-9]{1,3}|макс[а-я]*|до отказа)/i)
+         || e.s.match(/(\d{1,2})\s*подход[а-я]*\s*(?:по\s*)?([0-9]{1,3}|макс[а-я]*)?/i);
+    if(ms){ e.sets=Math.min(+ms[1],12); e.reps=(ms[2]||'').replace(/^макс[а-я]*/i,'макс');
+      e.s=(e.s.slice(0,ms.index)+' '+e.s.slice(ms.index+ms[0].length)).trim(); }
+    let name=cleanEdges(e.s);
+    if(!name)return;
+    name=name.charAt(0).toUpperCase()+name.slice(1);
+    out.push({id:'w'+uid(), day:day, group:group, name:name, sets:e.sets, reps:e.reps,
+      weight:e.weight, time:etime||time||'18:00', video:''});
+  });
+  return out;
+}
+
+function fitRows(day){
+  let d=(day===undefined||day===null)?new Date().getDay():day;
+  return workouts.filter(w=>w.day===null||w.day===undefined||w.day===d);
+}
+function plEx(n){ let a=n%10,b=n%100;
+  return n+' упражнени'+((a===1&&b!==11)?'е':((a>=2&&a<=4&&(b<12||b>14))?'я':'й')); }
+function fitEntry(id,dateKey){ return fitLog[(dateKey||todayKey())+'|'+id] || null; }
+function exDone(w){                       // упражнение считается сделанным
+  let e=fitEntry(w.id); if(!e)return false;
+  if(!w.sets) return !!e.d;
+  return (e.s||[]).filter(Boolean).length>=w.sets;
+}
+function lastWeight(id){                  // рабочий вес с прошлой тренировки
+  let tk=todayKey(), best=null, bd='';
+  Object.keys(fitLog).forEach(k=>{
+    let i=k.indexOf('|'); if(k.slice(i+1)!==id)return;
+    let dt=k.slice(0,i); if(dt>=tk)return;
+    let v=fitLog[k]&&fitLog[k].w;
+    if(v!=null&&dt>bd){bd=dt;best=v;}
+  });
+  return best==null?null:{w:best,d:bd};
+}
+function fitTouch(id){
+  let k=todayKey()+'|'+id;
+  if(!fitLog[k])fitLog[k]={s:[],w:null,d:false};
+  return fitLog[k];
+}
+function toggleSet(id,i){
+  let e=fitTouch(id); e.s=e.s||[];
+  while(e.s.length<=i)e.s.push(false);
+  e.s[i]=!e.s[i];
+  save(); renderFit(); renderToday();
+  if(navigator.vibrate)navigator.vibrate(8);
+}
+function toggleEx(id){ let e=fitTouch(id); e.d=!e.d; save(); renderFit(); renderToday();
+  if(navigator.vibrate)navigator.vibrate(8); }
+function setWeight(id,v){
+  let e=fitTouch(id); let n=parseFloat(String(v).replace(',','.'));
+  e.w=isFinite(n)?n:null;
+  let w=workouts.find(x=>x.id===id); if(w&&isFinite(n))w.weight=n;
+  save();
+}
+function delEx(id){ workouts=workouts.filter(w=>w.id!==id); save(); renderFit(); renderToday(); toast('Удалено'); }
+
+/* видео к упражнению: лежит в Supabase Storage, грузится только по тапу */
+function fitPickVideo(id){ fitVideoTarget=id; let f=document.getElementById('fitVideoFile'); f.value=''; f.click(); }
+async function fitVideoPicked(inp){
+  let file=inp.files&&inp.files[0]; if(!file)return;
+  let id=fitVideoTarget; fitVideoTarget='';
+  if(file.size>25*1024*1024){ toast('Видео больше 25 МБ — сними покороче'); return; }
+  toast('Загружаю видео…');
+  try{
+    ensureSyncCode();
+    let ext=(file.name.split('.').pop()||'mp4').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,4)||'mp4';
+    let path=syncCode+'/'+id+'-'+Date.now()+'.'+ext;
+    let r=await fetch(SUPA_URL+'/storage/v1/object/pill-fit/'+path,{method:'POST',
+      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
+               'content-type':file.type||'video/mp4','x-upsert':'true'}, body:file});
+    if(!r.ok) throw new Error('http '+r.status);
+    let w=workouts.find(x=>x.id===id);
+    if(w){ w.video=SUPA_URL+'/storage/v1/object/public/pill-fit/'+path; save(); renderFit(); }
+    toast('Видео добавлено ✓');
+  }catch(e){ toast('Не получилось загрузить видео'); }
+}
+function fitShowVideo(id){
+  let box=document.getElementById('vid-'+id); if(!box)return;
+  let w=workouts.find(x=>x.id===id); if(!w||!w.video)return;
+  if(box.innerHTML){ box.innerHTML=''; return; }
+  box.innerHTML='<video class="exvideo" src="'+escAttr(w.video)+'" controls playsinline preload="metadata"></video>';
+  box.querySelector('video').play().catch(()=>{});
+}
+
+function renderFitDays(){
+  let c=document.getElementById('fitDays'); if(!c)return;
+  let today=new Date().getDay();
+  c.innerHTML=[1,2,3,4,5,6,0].map(d=>{
+    let has=fitRows(d).length;
+    return '<button class="labcat'+(d===fitDay?' on':'')+(has?'':' dim')+'" onclick="selectFitDay('+d+')">'
+      +DOW_SHORT[d]+(d===today?' •':'')+'</button>';
+  }).join('');
+}
+function selectFitDay(d){ fitDay=d; renderFit(); }
+
 function renderFit(){
-  let c=document.getElementById('fitList'); if(!c)return;
-  c.innerHTML='<div class="empty-state"><div class="em">🏋️</div>'
-    +'<p>Раздел готов — осталось наполнить.<br><br>'
-    +'Напиши, как ведёшь тренировки: план на неделю,<br>'
-    +'отметки «сделал» по дням или подходы и веса —<br>'
-    +'сделаю так же, как «Питание».</p></div>';
+  let c=document.getElementById('fitList'), bn=document.getElementById('fitBanner');
+  if(!c||!bn)return;
+  renderFitDays();
+  let today=new Date().getDay(), isToday=(fitDay===today);
+  let rows=fitRows(fitDay);
+  if(!rows.length){
+    bn.innerHTML='';
+    c.innerHTML='<div class="empty-state"><div class="em">🏋️</div><p>'
+      +(workouts.length?('На '+lc(DOW_FULL[fitDay])+' тренировки нет.<br>Это день отдыха — или добавь план<br>в ⚙️ «Ещё» → «Добавить» → «Тренировки».')
+                       :('План тренировок пока пустой.<br>Открой ⚙️ «Ещё» → «Добавить» → «Тренировки»<br>и вставь программу на неделю.'))
+      +'</p></div>';
+    return;
+  }
+  let group=(rows.find(w=>w.group)||{}).group||'';
+  let done=rows.filter(exDone).length;
+  bn.innerHTML = isToday
+    ? `<div class="banner"><div class="lbl">Сегодня</div>
+        <div class="big">${esc(group||'Тренировка')}</div>
+        <div class="sub">${plEx(rows.length)} · сделано ${done} из ${rows.length}</div></div>`
+    : `<div class="banner empty"><div class="lbl">План</div>
+        <div class="big" style="color:var(--text)">${DOW_FULL[fitDay]}${group?' — '+esc(group):''}</div>
+        <div class="sub">${plEx(rows.length)}</div></div>`;
+  c.innerHTML='<div class="card">'+rows.map(w=>{
+    let e=fitEntry(w.id)||{}, dn=exDone(w);
+    let last=lastWeight(w.id);
+    let plan=[];
+    if(w.sets)plan.push(w.sets+'×'+(w.reps||'—'));
+    if(w.weight!=null)plan.push('<b>'+w.weight+' кг</b>');
+    let meta=plan.join(' · ');
+    if(last)meta+=(meta?' · ':'')+'прошлый раз '+last.w+' кг';
+    let dots='';
+    if(isToday){
+      if(w.sets){
+        for(let i=0;i<w.sets;i++){
+          let on=(e.s||[])[i];
+          dots+='<button class="setdot'+(on?' on':'')+'" onclick="toggleSet(\''+w.id+'\','+i+')">'+(i+1)+'</button>';
+        }
+        dots+='<span class="wbox"><input type="number" inputmode="decimal" step="0.5" min="0" placeholder="—"'
+          +' value="'+(e.w!=null?e.w:(w.weight!=null?w.weight:''))+'"'
+          +' onchange="setWeight(\''+w.id+'\',this.value)"> кг</span>';
+      } else {
+        dots+='<button class="setdot'+(e.d?' on':'')+'" onclick="toggleEx(\''+w.id+'\')">'+(e.d?'✓':'—')+'</button>';
+      }
+    }
+    let vbtn = w.video
+      ? '<button class="vbtn" onclick="fitShowVideo(\''+w.id+'\')">▶ видео</button>'
+      : '<button class="vbtn" onclick="fitPickVideo(\''+w.id+'\')">＋ видео</button>';
+    return `<div class="ex ${dn?'done':''}">
+      <div class="top">
+        <div class="nm">${esc(w.name)}</div>
+        ${vbtn}
+        <button class="iconbtn" onclick="delEx('${w.id}')">🗑</button>
+      </div>
+      ${meta?`<div class="meta">${meta}</div>`:''}
+      ${dots?`<div class="setrow">${dots}</div>`:''}
+      <div id="vid-${w.id}"></div>
+    </div>`;
+  }).join('')+'</div>'
+  +'<div class="sum">'+(isToday?('Сделано '+done+' из '+rows.length):plEx(rows.length)+' по плану')+'</div>';
+}
+
+function renderFitParsed(){
+  let c=document.getElementById('fitParsedList'), lastKey='init';
+  c.innerHTML=fitParsed.map((w,i)=>{
+    let head='';
+    let dkey=((w.day===null||w.day===undefined)?'all':w.day)+'|'+(w.group||'');
+    if(dkey!==lastKey){ lastKey=dkey;
+      head='<div class="lab-divider">'+((w.day===null||w.day===undefined)?'Каждый день':DOW_FULL[w.day])
+        +(w.group?' — '+esc(w.group):'')+'</div>'; }
+    let opts=['<option value=""'+((w.day===null||w.day===undefined)?' selected':'')+'>каждый день</option>']
+      .concat([1,2,3,4,5,6,0].map(d=>'<option value="'+d+'"'+(w.day===d?' selected':'')+'>'+DOW_FULL[d]+'</option>')).join('');
+    return head+`
+    <div class="pp">
+      <input class="pnm" value="${escAttr(w.name)}" oninput="fitParsed[${i}].name=this.value">
+      <div class="pr">
+        <label>день:</label>
+        <select onchange="fitParsed[${i}].day=this.value===''?null:+this.value;renderFitParsed()">${opts}</select>
+        <input type="text" style="flex:1;min-width:110px" value="${escAttr(w.group)}" placeholder="группа мышц" oninput="fitParsed[${i}].group=this.value">
+      </div>
+      <div class="pr">
+        <label>подходы:</label>
+        <input type="number" min="0" max="12" style="width:70px" value="${w.sets||''}" placeholder="—" oninput="fitParsed[${i}].sets=this.value?parseInt(this.value):0">
+        <label>повторы:</label>
+        <input type="text" style="width:80px" value="${escAttr(w.reps)}" placeholder="10" oninput="fitParsed[${i}].reps=this.value">
+        <label>вес:</label>
+        <input type="number" min="0" step="0.5" style="width:80px" value="${w.weight??''}" placeholder="кг" oninput="fitParsed[${i}].weight=this.value?parseFloat(this.value):null">
+      </div>
+      <button class="pdel" onclick="fitParsed.splice(${i},1);renderFitParsed()">Убрать упражнение</button>
+    </div>`;
+  }).join('');
 }
 
 /* ---------- НАВИГАЦИЯ ---------- */
@@ -1317,7 +1620,7 @@ function setDate(){
   let mon=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
   document.getElementById('hDate').textContent=days[d.getDay()]+', '+d.getDate()+' '+mon[d.getMonth()];
 }
-setDate(); renderToday(); renderFood(); updNotifState();
+setDate(); renderToday(); renderFood(); renderFit(); updNotifState();
 checkReminders();
 // при старте обновляем подписку на push (часовой пояс/endpoint могли смениться)
 if('Notification'in window&&Notification.permission==='granted'){setTimeout(()=>subscribeForPush(),1500);}
