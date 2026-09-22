@@ -1682,10 +1682,14 @@ function fitCheckDone(){   // все упражнения отмечены — �
   save(); renderFit();
   toast('Тренировка закрыта ✓ Следующая '+dShort(fitDate)+(fitGroup(nx)?' — '+lc(fitGroup(nx)):''));
 }
-function fitUseDay(id){        // отмечаешь в другом дне — значит сегодня тренируешь его
+function fitUseDay(id){        // отметка в чужом дне не двигает цикл без спроса
   let w=workouts.find(x=>x.id===id); if(!w)return;
   let d=+w.d||1;
-  if(d!==fitCur){ fitCur=d; localStorage.setItem(LS_FITCUR,String(fitCur)); }
+  if(d===fitCur)return;
+  let g=fitGroup(d);
+  if(!confirm('Сегодня тренируешь этот день'+(g?' ('+lc(g)+')':'')+'?\nРасписание сдвинется на него.'))return;
+  fitCur=d; localStorage.setItem(LS_FITCUR,String(fitCur));
+  fitDate=todayKey(); localStorage.setItem(LS_FITDATE,fitDate);
 }
 function acceptSuggest(id){          // первый тап по подходу подтверждает предложенный вес
   let w=workouts.find(x=>x.id===id); if(!w)return;
@@ -1974,7 +1978,7 @@ function renderFit(){
       dots+='<button class="setdot'+(e.d?' on':'')+'" onclick="toggleEx(\''+w.id+'\')">'+(e.d?'✓':'—')+'</button>';
     }
     let hints=[];
-    let wu=warmup(kg);
+    let wu=(w.sets>1)?warmup(kg):null;         // разминочному упражнению подводящий ни к чему
     if(wu)hints.push('подводящий: '+wu+' кг × 8');
     if(last&&!sug)hints.push('прошлый раз '+last.w+' кг');
     let sugline='';
@@ -2087,7 +2091,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 20:29 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 20:35 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
