@@ -27,7 +27,11 @@
     -webkit-font-smoothing:antialiased; overscroll-behavior-y:none;
   }
   .app{max-width:560px;margin:0 auto;padding-bottom:90px}
-  header{padding:18px 18px 8px}
+  header{padding:18px 18px 8px;display:flex;align-items:flex-start;gap:12px}
+  header .htext{flex:1;min-width:0}
+  .hright{flex:0 0 auto;text-align:right;max-width:46%;padding-top:4px}
+  .hright .g{font-size:15px;font-weight:800;color:var(--green-d);line-height:1.25}
+  .hright .p{font-size:12.5px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
   header h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.5px}
   header .date{color:var(--muted);font-size:14px;margin-top:2px}
   .view{padding:6px 14px}
@@ -145,10 +149,10 @@
     overflow:hidden;background:#0b0e13;margin:0 0 11px;cursor:pointer;font-family:inherit}
   .vtile img,.vtile video{width:100%;height:100%;object-fit:cover;display:block}
   .vtile .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
-  .vtile .play i{width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.93);
-    color:#15181d;font-size:21px;font-style:normal;display:flex;align-items:center;justify-content:center;
-    padding-left:4px;box-shadow:0 2px 12px rgba(0,0,0,.35)}
-  .vtile.empty{height:96px;background:var(--card2);border:1.5px dashed var(--line);color:var(--muted);
+  .vtile .play i{width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.93);
+    color:#15181d;font-size:17px;font-style:normal;display:flex;align-items:center;justify-content:center;
+    padding-left:3px;box-shadow:0 2px 12px rgba(0,0,0,.35)}
+  .vtile.empty{height:76px;background:var(--card2);border:1.5px dashed var(--line);color:var(--muted);
     display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;font-weight:700}
   .vtile input[type=file],.vbtn input[type=file]{display:none}
   label.vbtn{display:inline-block}
@@ -240,8 +244,11 @@
 <body>
 <div class="app">
   <header>
-    <h1 id="hTitle">Сегодня</h1>
-    <div class="date" id="hDate"></div>
+    <div class="htext">
+      <h1 id="hTitle">Сегодня</h1>
+      <div class="date" id="hDate"></div>
+    </div>
+    <div class="hright" id="hRight"></div>
   </header>
 
   <!-- TODAY -->
@@ -1566,7 +1573,14 @@ function fitCheckDone(){   // все упражнения отмечены — �
 function toggleSet(id,i){
   let e=fitTouch(id); e.s=e.s||[];
   while(e.s.length<=i)e.s.push(false);
-  e.s[i]=!e.s[i];
+  if(e.s[i]){ e.s[i]=false; }                       // повторный тап снимает отметку
+  else {
+    let prev=(typeof e.s[i-1]==='number')?e.s[i-1]:'';
+    let v=prompt('Сколько повторов в подходе '+(i+1)+'? (можно пропустить)', prev);
+    if(v===null)return;
+    let n=parseInt(String(v).replace(/[^0-9]/g,''),10);
+    e.s[i]=(isFinite(n)&&n>0)?n:true;               // без числа — просто отметка
+  }
   save(); renderFit(); renderToday();
   if(navigator.vibrate)navigator.vibrate(8);
   fitCheckDone();
@@ -1688,9 +1702,13 @@ async function fitVideoPicked(inp,id){
 }
 // вертикальный ролик держим по центру и не даём ему съесть весь экран
 function vtileStyle(ar,tall){
-  return (ar<0.95)
-    ? 'height:min('+(tall?'70vh':'44vh')+','+(tall?520:340)+'px);aspect-ratio:'+ar+';width:auto;margin-left:auto;margin-right:auto'
+  if(tall) return (ar<0.95)
+    ? 'height:min(70vh,520px);aspect-ratio:'+ar+';width:auto;margin-left:auto;margin-right:auto'
     : 'width:100%;aspect-ratio:'+ar;
+  // в списке ячейка компактная, разворачивается только при просмотре
+  return (ar<0.95)
+    ? 'height:min(26vh,200px);aspect-ratio:'+ar+';width:auto;margin-left:auto;margin-right:auto'
+    : 'width:min(100%,300px);aspect-ratio:'+ar+';margin-left:auto;margin-right:auto';
 }
 const videoBlobs={};   // скачанные ролики держим в памяти: второй раз открывается сразу
 
@@ -1769,13 +1787,10 @@ function renderFit(){
   }
   let group=fitGroup(fitView);
   let done=rows.filter(exDone).length;
-  bn.innerHTML = isCur
-    ? `<div class="banner" onclick="setFitGroup(${fitView})"><div class="lbl">Сегодня · день ${fitView} из ${days.length}</div>
-        <div class="big">${esc(group||'Тренировка')}</div>
-        <div class="sub">${plEx(rows.length)} · сделано ${done} из ${rows.length}</div></div>`
-    : `<div class="banner empty" onclick="setFitGroup(${fitView})"><div class="lbl">План · день ${fitView} из ${days.length}</div>
-        <div class="big" style="color:var(--text)">${esc(group||'Тренировка')}</div>
-        <div class="sub">${plEx(rows.length)}</div></div>`;
+  bn.innerHTML='';
+  let hr=document.getElementById('hRight');
+  if(hr)hr.innerHTML=`<div class="g" onclick="setFitGroup(${fitView})">${esc(group||'Тренировка')}</div>`
+    +`<div class="p">${isCur?('сделано '+done+' из '+rows.length):('день '+fitView+' · план')}</div>`;
   c.innerHTML='<div class="card">'+rows.map(w=>{
     let e=fitEntry(w.id)||{}, dn=exDone(w);
     let last=lastWeight(w.id);
@@ -1788,12 +1803,17 @@ function renderFit(){
     let wu=warmup(kg);
     if(wu)meta+=(meta?'<br>':'')+'подводящий: '+wu+' кг × 8';
     if(last)meta+=(meta?'<br>':'')+'прошлый раз '+last.w+' кг';
+    let reps=(e.s||[]).filter(x=>typeof x==='number');
+    if(reps.length)meta+=(meta?'<br>':'')+'повторы: '+reps.join(' · ');
+    if(typeof (e.s||[])[0]==='number' && e.s[0]>=10)
+      meta+=(meta?'<br>':'')+'<span style="color:var(--green-d);font-weight:700">первый подход 10+ — со следующей тренировки поднимай вес</span>';
     let dots='';
     if(isCur){
       if(w.sets){
         for(let i=0;i<w.sets;i++){
           let on=(e.s||[])[i];
-          dots+='<button class="setdot'+(on?' on':'')+'" onclick="toggleSet(\''+w.id+'\','+i+')">'+(i+1)+'</button>';
+          dots+='<button class="setdot'+(on?' on':'')+'" onclick="toggleSet(\''+w.id+'\','+i+')">'
+            +(typeof on==='number'?on:(on?'✓':(i+1)))+'</button>';
         }
       } else {
         dots+='<button class="setdot'+(e.d?' on':'')+'" onclick="toggleEx(\''+w.id+'\')">'+(e.d?'✓':'—')+'</button>';
@@ -1833,7 +1853,8 @@ function renderFit(){
   + (isCur
       ? '<button class="btn ghost" onclick="fitSkip()">Следующая тренировка →</button>'
       : '<button class="btn ghost" onclick="setFitCur('+fitView+')">Сделать текущей</button>')
-  + '<div class="rules">Число подходов у каждого упражнения своё — тапни «изменить ✎» под названием.<br><br>'
+  + '<div class="rules">Число подходов своё у каждого упражнения — тапни «изменить ✎» под названием.<br>'
+  + 'Тап по кружку подхода спрашивает повторы; можно пропустить — тогда это просто отметка.<br><br>'
   + 'Все подходы — в отказ, с одним рабочим весом.<br>'
   + 'Перед рабочими один подводящий: 60–65 % от рабочего, 8 повторов — в счёт не идёт.<br>'
   + 'Когда рабочий вес пошёл на 10–12 повторов в первом подходе — со следующей тренировки поднимаешь вес.</div>';
@@ -1877,13 +1898,14 @@ function go(tab){
   let nb=NAVOF[tab]||tab;
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===nb));
   document.getElementById('hTitle').textContent=TITLES[tab];
+  let hr=document.getElementById('hRight'); if(hr&&tab!=='fit')hr.innerHTML='';
   if(tab==='today')renderToday(); if(tab==='meds')renderMeds(); if(tab==='food')renderFood(); if(tab==='fit')renderFit();
   if(tab==='labs'){renderLabs();labLoad();} if(tab==='set'){updNotifState();aiStateUpd();}
   window.scrollTo(0,0);
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 18:47 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 18:52 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
