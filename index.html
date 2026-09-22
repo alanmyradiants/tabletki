@@ -195,6 +195,31 @@
     color:var(--text);flex:0 0 auto;font-variant-numeric:tabular-nums}
   .progress.done{background:var(--green);color:#06231b}
   .labcat.dim{opacity:.45}
+  .calbar{width:calc(100% - 8px);margin:8px 4px 12px;background:var(--card2);border:none;border-radius:16px;
+    padding:14px 16px;display:flex;align-items:center;gap:8px;font-family:inherit;font-size:14.5px;
+    font-weight:700;color:var(--text);cursor:pointer;text-align:left}
+  .calbar .sub{margin-left:auto;color:var(--muted);font-size:12.5px;white-space:nowrap}
+  .cal{margin:0 4px 14px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px}
+  .calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .calhead b{font-size:15px;font-weight:800}
+  .calnav{background:var(--card2);border:none;border-radius:10px;width:34px;height:34px;font-size:17px;
+    color:var(--text);cursor:pointer;font-family:inherit}
+  .calgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;align-items:stretch}
+  .calgrid .wd{font-size:11px;color:var(--muted);text-align:center;font-weight:700;padding-bottom:2px}
+  .cell{aspect-ratio:1;min-width:0;overflow:hidden;border-radius:10px;border:1.5px solid transparent;
+    background:none;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:1px;font-family:inherit}
+  .cell .n{font-size:13px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+  .cell .g{font-size:8px;font-weight:700;line-height:1;color:var(--muted);max-width:100%;
+    padding:0 1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cell.plan{border-color:var(--green);cursor:pointer}
+  .cell.plan .g{color:var(--green-d)}
+  .cell.done{background:var(--green);border-color:var(--green);cursor:pointer}
+  .cell.done .n,.cell.done .g{color:#06231b}
+  .cell.today{box-shadow:0 0 0 2px var(--text) inset}
+  .cell.dim .n{color:var(--line)}
+  .calnote{margin-top:10px;font-size:11.5px;color:var(--muted);line-height:1.4;text-align:center}
+
   .rules{margin:14px 6px 0;font-size:12.5px;color:var(--muted);line-height:1.6;
     background:var(--card2);border-radius:14px;padding:12px 14px}
 
@@ -655,20 +680,10 @@ function renderToday(){
   let nh=nowHM();
   // banner: следующая невыпитая доза
   let next=rows.find(r=>!log[r.key] && r.tm>=nh) || rows.find(r=>!log[r.key]);
+  bn.innerHTML=calHTML();
   if(rows.length===0){
-    bn.innerHTML='';
     cont.innerHTML='<div class="empty-state"><div class="em">📋</div><p>На сегодня пусто.<br>Открой ⚙️ «Ещё» → «Добавить» —<br>лекарства или меню питания.</p></div>';
     return;
-  }
-  let done=rows.filter(r=>log[r.key]).length;
-  if(next){
-    bn.innerHTML=`<div class="banner"><div class="lbl">${next.type==='food'?'Следующий приём пищи':'Следующий приём'}</div>
-      <div class="big">${next.ic} ${esc(next.name)} — ${next.tm}</div>
-      <div class="sub">${esc(next.sub)}</div></div>`;
-  } else {
-    bn.innerHTML=`<div class="banner empty"><div class="lbl">Готово</div>
-      <div class="big" style="color:var(--green)">Всё выполнено на сегодня ✓</div>
-      <div class="sub">${done} из ${rows.length}</div></div>`;
   }
   cont.innerHTML='<div class="card">'+rows.map(r=>{
     let dn=!!log[r.key];
@@ -2073,6 +2088,94 @@ function renderFitParsed(){
   }).join('');
 }
 
+/* ---------- КАЛЕНДАРЬ ТРЕНИРОВОК ---------- */
+const LS_CALOPEN='pills.calopen';
+let calOpen=localStorage.getItem(LS_CALOPEN)==='1';
+let calMonth='';                       // какой месяц смотрим, 'YYYY-MM'
+
+function mKey(key){ return String(key||'').slice(0,7); }
+function fitDoneDays(){                // когда тренировки реально были
+  let out={};
+  Object.keys(fitLog).forEach(k=>{
+    let i=k.indexOf('|'); if(i<0)return;
+    let dt=k.slice(0,i), id=k.slice(i+1);
+    let w=workouts.find(x=>x.id===id); if(!w)return;
+    let e=fitLog[k]; if(!e)return;
+    if(!((e.s||[]).some(Boolean)||e.d))return;
+    out[dt]=+w.d||1;
+  });
+  return out;
+}
+function fitSchedule(fromKey,toKey){   // план: какая тренировка на какую дату
+  let out={}, all=fitDays();
+  if(!all.length)return out;
+  let base=fitDateEnsure(), i=all.indexOf(+fitCur); if(i<0)i=0;
+  let d=base, j=i;
+  for(let k=0;k<400&&d<=toKey;k++){    // вперёд от ближайшей тренировки
+    if(d>=fromKey)out[d]=all[j];
+    d=dAdd(d,fitStep); j=(j+1)%all.length;
+  }
+  d=base; j=i;
+  for(let k=0;k<400;k++){              // назад, чтобы месяц был заполнен целиком
+    d=dAdd(d,-fitStep); j=(j-1+all.length)%all.length;
+    if(d<fromKey)break;
+    if(d<=toKey&&!out[d])out[d]=all[j];
+  }
+  return out;
+}
+function gShort(d){                    // «Спина + трицепс» → «спина»
+  let g=lc(fitGroup(d)||''); if(!g)return '';
+  return g.split(/[\s+,]+/)[0];
+}
+function calShift(n){
+  let cm=(calMonth||mKey(todayKey()))+'-01';
+  calMonth=mKey(dAdd(cm,n>0?32:-1).slice(0,7)+'-01');
+  renderToday();
+}
+function calToggle(){ calOpen=!calOpen; localStorage.setItem(LS_CALOPEN,calOpen?'1':'0'); renderToday(); }
+function calPick(key,d){ fitView=+d; go('fit'); }
+
+function calHTML(){
+  let tk=todayKey();
+  if(!calMonth)calMonth=mKey(tk);
+  let nextD=fitDateEnsure(), nextG=fitGroup(fitCur);
+  let bar='<button class="calbar" onclick="calToggle()">📅 '
+    + (nextD===tk ? ('сегодня'+(nextG?' — '+lc(nextG):'')) 
+                  : ('следующая '+dShort(nextD)+(nextG?' — '+lc(nextG):'')))
+    + '<span class="sub">'+(calOpen?'свернуть ▴':'календарь ▾')+'</span></button>';
+  if(!calOpen)return bar;
+
+  let first=calMonth+'-01';
+  let fd=new Date(first+'T00:00:00');
+  let start=(fd.getDay()+6)%7;                       // неделя с понедельника
+  let days=new Date(fd.getFullYear(),fd.getMonth()+1,0).getDate();
+  let last=calMonth+'-'+pad2(days);
+  let plan=fitSchedule(first,last), done=fitDoneDays();
+  let MON=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+  let cells='';
+  for(let i=0;i<start;i++)cells+='<div class="cell dim"></div>';
+  for(let n=1;n<=days;n++){
+    let key=calMonth+'-'+pad2(n);
+    let dd=done[key], pd=(!dd&&key>=tk)?plan[key]:null;
+    let day=dd||pd||null;
+    let cls='cell'+(dd?' done':(pd?' plan':''))+(key===tk?' today':'');
+    cells+= day
+      ? '<button class="'+cls+'" onclick="calPick(\''+key+'\','+day+')">'
+        +'<span class="n">'+n+'</span><span class="g">'+esc(gShort(day))+'</span></button>'
+      : '<div class="'+cls+'"><span class="n">'+n+'</span></div>';
+  }
+  return bar
+    +'<div class="cal">'
+    +'<div class="calhead"><button class="calnav" onclick="calShift(-1)">‹</button>'
+    +'<b>'+MON[fd.getMonth()]+' '+fd.getFullYear()+'</b>'
+    +'<button class="calnav" onclick="calShift(1)">›</button></div>'
+    +'<div class="calgrid">'
+    +['пн','вт','ср','чт','пт','сб','вс'].map(w=>'<div class="wd">'+w+'</div>').join('')
+    +cells+'</div>'
+    +'<div class="calnote">зелёным — сделано, контуром — по плану; тап открывает тренировку</div></div>';
+}
+
 /* ---------- НАВИГАЦИЯ ---------- */
 const TITLES={today:'Сегодня',meds:'Лекарства',fit:'Тренировки',food:'Питание',add:'Добавить',labs:'Анализы',set:'Настройки'};
 const VIEWS=['today','meds','fit','food','add','labs','set'];
@@ -2091,7 +2194,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 20:35 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 20:46 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
