@@ -124,6 +124,10 @@
 
   /* ------- Тренировки ------- */
   .ex{padding:12px 10px;border-radius:14px}
+  .ex.done{background:#f1faf6}
+  .ex.done .nm{color:var(--muted);text-decoration:line-through}
+  .okbadge{flex:0 0 auto;width:23px;height:23px;border-radius:50%;background:var(--green);color:#06231b;
+    font-size:13px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:1px}
   .exrow{display:flex;gap:12px;align-items:flex-start}
   .vcol{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px}
   .vthumb{position:relative;width:76px;height:101px;border:none;padding:0;border-radius:12px;overflow:hidden;
@@ -1607,11 +1611,17 @@ function fitCheckDone(){   // все упражнения отмечены — �
   if(!rows.length||!rows.every(exDone))return;
   let nx=fitNext(fitCur);
   if(nx===fitCur)return;
-  fitCur=nx; fitView=nx; localStorage.setItem(LS_FITCUR,String(fitCur));
+  fitCur=nx; localStorage.setItem(LS_FITCUR,String(fitCur));
   save(); renderFit();
   toast('Тренировка закрыта ✓ Следующая — день '+nx+(fitGroup(nx)?': '+lc(fitGroup(nx)):''));
 }
+function fitUseDay(id){        // отмечаешь в другом дне — значит сегодня тренируешь его
+  let w=workouts.find(x=>x.id===id); if(!w)return;
+  let d=+w.d||1;
+  if(d!==fitCur){ fitCur=d; localStorage.setItem(LS_FITCUR,String(fitCur)); }
+}
 function toggleSet(id,i){
+  fitUseDay(id);
   let e=fitTouch(id); e.s=e.s||[];
   while(e.s.length<=i)e.s.push(false);
   if(e.s[i]){ e.s[i]=false; }                       // повторный тап снимает отметку
@@ -1626,7 +1636,7 @@ function toggleSet(id,i){
   if(navigator.vibrate)navigator.vibrate(8);
   fitCheckDone();
 }
-function toggleEx(id){ let e=fitTouch(id); e.d=!e.d; save(); renderFit(); renderToday();
+function toggleEx(id){ fitUseDay(id); let e=fitTouch(id); e.d=!e.d; save(); renderFit(); renderToday();
   if(navigator.vibrate)navigator.vibrate(8); fitCheckDone(); }
 function setWeight(id,v){
   let e=fitTouch(id); let n=parseFloat(String(v).replace(',','.'));
@@ -1796,11 +1806,10 @@ async function fitShowVideo(id){
 function renderFitDays(){
   let c=document.getElementById('fitDays'); if(!c)return;
   let days=fitDays();
-  c.innerHTML=days.map(d=>{
-    let g=fitGroup(d);
-    return '<button class="labcat'+(d===fitView?' on':'')+'" onclick="selectFitDay('+d+')">'
-      +'День '+d+(g?' · '+esc(lc(g)):'')+(d===fitCur?' •':'')+'</button>';
-  }).join('')+'<button class="labcat" onclick="addFitDay()">＋ день</button>';
+  c.innerHTML=days.map(d=>
+    '<button class="labcat'+(d===fitView?' on':'')+'" onclick="selectFitDay('+d+')">'
+    +'День '+d+(d===fitCur?' •':'')+'</button>'
+  ).join('')+'<button class="labcat" onclick="addFitDay()">＋ день</button>';
 }
 function selectFitDay(d){ fitView=+d; renderFit(); }
 
@@ -1816,6 +1825,10 @@ function renderFit(){
   let rows=fitRows(fitView);
   if(!rows.length){
     let g=fitGroup(fitView);
+    let hr0=document.getElementById('hRight');
+    if(hr0)hr0.innerHTML=days.length
+      ? `<div class="g" onclick="setFitGroup(${fitView})">${esc(g||'Тренировка')}</div><div class="p">день ${fitView} · пусто</div>`
+      : '';
     bn.innerHTML = days.length
       ? `<div class="banner empty"><div class="lbl">День ${fitView}</div>
           <div class="big" style="color:var(--text)">${esc(g||'Пока пусто')}</div>
@@ -1836,7 +1849,7 @@ function renderFit(){
   bn.innerHTML='';
   let hr=document.getElementById('hRight');
   if(hr)hr.innerHTML=`<div class="g" onclick="setFitGroup(${fitView})">${esc(group||'Тренировка')}</div>`
-    +`<div class="p">${isCur?('сделано '+done+' из '+rows.length):('день '+fitView+' · план')}</div>`;
+    +`<div class="p">сделано ${done} из ${rows.length}</div>`;
   c.innerHTML='<div class="card">'+rows.map(w=>{
     let e=fitEntry(w.id)||{}, dn=exDone(w);
     let last=lastWeight(w.id);
@@ -1854,19 +1867,17 @@ function renderFit(){
       thumb = `<label class="vthumb empty">＋<br>видео<input type="file" accept="video/*" onchange="fitVideoPicked(this,'${w.id}')"></label>`;
     }
     let dots='';
-    if(isCur){
-      if(w.sets){
-        for(let i=0;i<w.sets;i++){
-          let on=(e.s||[])[i];
-          dots+='<button class="setdot'+(on?' on':'')+'" onclick="toggleSet(\''+w.id+'\','+i+')">'
-            +(typeof on==='number'?on:(on?'✓':(i+1)))+'</button>';
-        }
-        if(w.sets>1)
-          dots+='<button class="setdot add" onclick="addSet(\''+w.id+'\',-1)" aria-label="Убрать подход">−</button>';
-        dots+='<button class="setdot add" onclick="addSet(\''+w.id+'\',1)" aria-label="Добавить подход">＋</button>';
-      } else {
-        dots+='<button class="setdot'+(e.d?' on':'')+'" onclick="toggleEx(\''+w.id+'\')">'+(e.d?'✓':'—')+'</button>';
+    if(w.sets){
+      for(let i=0;i<w.sets;i++){
+        let on=(e.s||[])[i];
+        dots+='<button class="setdot'+(on?' on':'')+'" onclick="toggleSet(\''+w.id+'\','+i+')">'
+          +(typeof on==='number'?on:(on?'✓':(i+1)))+'</button>';
       }
+      if(w.sets>1)
+        dots+='<button class="setdot add" onclick="addSet(\''+w.id+'\',-1)" aria-label="Убрать подход">−</button>';
+      dots+='<button class="setdot add" onclick="addSet(\''+w.id+'\',1)" aria-label="Добавить подход">＋</button>';
+    } else {
+      dots+='<button class="setdot'+(e.d?' on':'')+'" onclick="toggleEx(\''+w.id+'\')">'+(e.d?'✓':'—')+'</button>';
     }
     let hints=[];
     let wu=warmup(kg);
@@ -1882,6 +1893,7 @@ function renderFit(){
         <div class="exbody">
           <div class="top">
             <div class="nm" onclick="renameEx('${w.id}')">${esc(w.name)}</div>
+            ${dn?'<span class="okbadge" aria-label="Сделано">✓</span>':''}
             <button class="iconbtn" onclick="moveEx('${w.id}',-1)" aria-label="Выше">↑</button>
             <button class="iconbtn" onclick="moveEx('${w.id}',1)" aria-label="Ниже">↓</button>
             <button class="iconbtn" onclick="delEx('${w.id}')" aria-label="Удалить">🗑</button>
@@ -1962,7 +1974,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 19:30 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 19:41 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
