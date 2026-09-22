@@ -1635,6 +1635,33 @@ function videoMime(file){        // .mov от iPhone — тот же конте�
   let t=(file&&file.type)||'';
   return (!t||t==='video/quicktime'||t==='video/x-m4v')?'video/mp4':t;
 }
+// несколько роликов сразу: на каждый заводим упражнение и грузим по очереди
+async function fitBulkPicked(inp,d){
+  let files=[].slice.call(inp.files||[]); inp.value='';
+  if(!files.length)return;
+  let n=fitRows(d).length, total=files.length, ok=0;
+  for(let i=0;i<total;i++){
+    let file=files[i];
+    let mb=Math.round(file.size/1048576);
+    if(file.size>120*1024*1024){ toast('Ролик '+(i+1)+' весит '+mb+' МБ — пропускаю'); continue; }
+    toast('Загружаю '+(i+1)+' из '+total+(mb>40?(' · '+mb+' МБ'):'')+'…');
+    let w={id:'w'+uid(), d:+d, group:fitGroup(d), name:'Упражнение '+(++n), sets:3, reps:'',
+           weight:null, time:'18:00', video:''};
+    workouts.push(w); save(); renderFit();
+    try{
+      ensureSyncCode();
+      let ext=(file.name.split('.').pop()||'mp4').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,4)||'mp4';
+      let base=syncCode+'/'+w.id+'-'+Date.now();
+      let shot=await videoPoster(file);
+      w.video=await storagePut(base+'.'+ext, file, videoMime(file));
+      if(shot&&shot.blob){ try{ w.poster=await storagePut(base+'.jpg', shot.blob, 'image/jpeg'); }catch(e){} }
+      w.ar=(shot&&shot.ar)?Math.round(shot.ar*1000)/1000:null;
+      ok++; save(); renderFit();
+    }catch(e){ toast('Ролик '+(i+1)+' не загрузился ('+(e&&e.message||'ошибка')+')'); }
+  }
+  toast(ok===total?('Готово: '+ok+' видео ✓'):('Загружено '+ok+' из '+total));
+  renderToday();
+}
 async function fitVideoPicked(inp,id){
   let file=inp.files&&inp.files[0]; if(!file)return;
   inp.value='';
@@ -1731,6 +1758,8 @@ function renderFit(){
       +(days.length?'В этом дне ещё нет упражнений.':'Плана пока нет.<br>Добавляй упражнения по одному —<br>к каждому сразу цепляется видео.')
       +'</p></div>'
       +'<button class="btn green" onclick="addEx('+fitView+')">＋ Упражнение</button>'
+      +'<label class="btn ghost" style="display:block;text-align:center">＋ Несколько видео сразу'
+      +'<input type="file" accept="video/*" multiple style="display:none" onchange="fitBulkPicked(this,'+fitView+')"></label>'
       +(days.length?'<button class="btn ghost" onclick="setFitGroup('+fitView+')">Что тренируем в этот день</button>':'')
       +'<div class="hint" style="text-align:center">Можно и целиком текстом: ⚙️ «Ещё» → «Добавить» → «Тренировки».</div>';
     return;
@@ -1795,6 +1824,8 @@ function renderFit(){
     </div>`;
   }).join('')+'</div>'
   + '<button class="btn green" onclick="addEx('+fitView+')">＋ Упражнение</button>'
+  + '<label class="btn ghost" style="display:block;text-align:center">＋ Несколько видео сразу'
+  + '<input type="file" accept="video/*" multiple style="display:none" onchange="fitBulkPicked(this,'+fitView+')"></label>'
   + (isCur
       ? '<button class="btn ghost" onclick="fitSkip()">Следующая тренировка →</button>'
       : '<button class="btn ghost" onclick="setFitCur('+fitView+')">Сделать текущей</button>')
@@ -1847,7 +1878,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 10:33 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 18:39 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
