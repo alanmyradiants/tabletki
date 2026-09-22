@@ -109,6 +109,14 @@
   .addt{background:none;border:1px dashed var(--line);color:var(--muted);border-radius:10px;padding:6px 10px;font-size:13px;cursor:pointer}
   .pdel{background:none;border:none;color:#ff8a8a;font-size:13px;font-weight:700;cursor:pointer;margin-top:8px}
 
+  /* ------- Питание / Тренировки / переходы из «Ещё» ------- */
+  .settings-row.tap{cursor:pointer}
+  .settings-row.tap:active{background:var(--card2)}
+  .chev{color:var(--muted);font-size:22px;font-weight:700;padding-left:10px;flex:0 0 auto}
+  .backlink{background:none;border:none;color:var(--muted);font-size:15px;font-weight:700;padding:4px 4px 2px;margin:0 0 2px;cursor:pointer;font-family:inherit}
+  .row .tp{font-size:17px;flex:0 0 auto;margin-right:-6px}
+  .sum{margin:12px 6px 0;font-size:13px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
+
   /* tab bar */
   nav{
     position:fixed;bottom:0;left:0;right:0;background:rgba(255,255,255,.94);
@@ -117,8 +125,9 @@
     padding:8px 6px calc(8px + env(safe-area-inset-bottom));z-index:50
   }
   nav button{
-    background:none;border:none;color:var(--muted);font-size:11px;font-weight:700;
-    display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 10px;cursor:pointer;font-family:inherit
+    background:none;border:none;color:var(--muted);font-size:10.5px;font-weight:700;
+    display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 4px;cursor:pointer;font-family:inherit;
+    flex:1 1 0;min-width:0;white-space:nowrap
   }
   nav button .ic{font-size:22px;line-height:1}
   nav button.active{color:var(--green)}
@@ -161,7 +170,7 @@
   .lab-txtcard{display:flex;justify-content:space-between;align-items:center;gap:10px}
   .lab-divider{margin:20px 8px 10px;font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
   .addtoggle{display:flex;gap:6px;background:var(--card2);border-radius:14px;padding:5px;margin:6px 4px 14px}
-  .addtoggle button{flex:1;border:none;background:none;border-radius:10px;padding:11px;font-size:15px;font-weight:800;color:var(--muted);cursor:pointer;font-family:inherit}
+  .addtoggle button{flex:1;border:none;background:none;border-radius:10px;padding:11px 4px;font-size:14px;font-weight:800;color:var(--muted);cursor:pointer;font-family:inherit;white-space:nowrap}
   .addtoggle button.on{background:var(--card);color:var(--text);box-shadow:0 1px 2px rgba(16,24,40,.08)}
   #labSearch{font-size:16px}
   .lab-card.tap{cursor:pointer}
@@ -203,8 +212,10 @@
 
   <!-- ADD -->
   <section class="view hidden" id="v-add">
+    <button class="backlink" onclick="go('set')">← Ещё</button>
     <div class="addtoggle">
       <button id="addtab-meds" class="on" onclick="setAddMode('meds')">💊 Лекарства</button>
+      <button id="addtab-food" onclick="setAddMode('food')">🥗 Питание</button>
       <button id="addtab-labs" onclick="setAddMode('labs')">📈 Анализы</button>
     </div>
 
@@ -218,6 +229,19 @@
         <div id="parsedList"></div>
         <button class="btn green" id="btnSaveParsed">Сохранить в график</button>
         <button class="btn ghost" id="btnCancelParsed">Отмена</button>
+      </div>
+    </div>
+
+    <div id="add-food" class="hidden">
+      <label class="fld">Вставь меню на день</label>
+      <textarea id="foodText" placeholder="Например:&#10;08:00 Завтрак — овсянка 60 г, 2 яйца, 450 ккал&#10;13:00 Обед — курица 200 г, рис, салат, 620 ккал&#10;16:30 Перекус — творог 150 г, яблоко&#10;19:30 Ужин — рыба, овощи, 480 ккал"></textarea>
+      <div class="hint">Каждый приём пищи — с новой строки: время, название, состав и калории (если знаешь). Если время не указать, оно подставится само: завтрак — 08:00, обед — 13:00, ужин — 19:00. Потом можно поправить вручную.</div>
+      <button class="btn green" id="btnFoodParse">Разобрать меню →</button>
+      <div class="preview hidden" id="foodPreviewWrap">
+        <h3>Проверь и поправь — потом сохрани</h3>
+        <div id="foodParsedList"></div>
+        <button class="btn green" id="btnSaveFoodParsed">Сохранить в меню</button>
+        <button class="btn ghost" id="btnCancelFoodParsed">Отмена</button>
       </div>
     </div>
 
@@ -238,6 +262,22 @@
   <!-- SETTINGS -->
   <section class="view hidden" id="v-set">
     <div class="card" style="margin-top:8px">
+      <div class="settings-row tap" onclick="go('add')">
+        <div>
+          <div class="t">➕ Добавить</div>
+          <div class="s">Лекарства, питание и анализы — разбор текста, PDF и фото.</div>
+        </div>
+        <span class="chev">›</span>
+      </div>
+      <div class="settings-row tap" onclick="go('labs')">
+        <div>
+          <div class="t">📈 Анализы</div>
+          <div class="s">Графики показателей и вся история по датам.</div>
+        </div>
+        <span class="chev">›</span>
+      </div>
+    </div>
+    <div class="card">
       <div class="settings-row">
         <div>
           <div class="t">Синхронизация устройств</div>
@@ -301,23 +341,42 @@
         </div>
         <button class="btn sm danger" onclick="wipeAll()">Очистить</button>
       </div>
+      <div class="settings-row">
+        <div>
+          <div class="t">Удалить меню питания</div>
+          <div class="s">Убрать все приёмы пищи.</div>
+        </div>
+        <button class="btn sm danger" onclick="wipeFood()">Очистить</button>
+      </div>
     </div>
     <div class="hint" style="text-align:center;margin-top:20px">Данные хранятся на этом устройстве, а с кодом — синхронизируются между устройствами. 💊</div>
   </section>
 
   <!-- LABS -->
   <section class="view hidden" id="v-labs">
+    <button class="backlink" onclick="go('set')">← Ещё</button>
     <div id="labCats" class="labcats"></div>
     <input type="text" id="labSearch" placeholder="🔎 Поиск показателя (напр. тестостерон)" autocapitalize="off" autocorrect="off" spellcheck="false" oninput="renderLabs()" style="margin:6px 4px 4px;width:calc(100% - 8px)">
     <div id="labCharts"></div>
+  </section>
+
+  <!-- WORKOUTS (заготовка: наполним, когда решим, что показывать) -->
+  <section class="view hidden" id="v-fit">
+    <div id="fitList"></div>
+  </section>
+
+  <!-- FOOD -->
+  <section class="view hidden" id="v-food">
+    <div id="foodBanner"></div>
+    <div id="foodList"></div>
   </section>
 </div>
 
 <nav>
   <button data-tab="today" class="active" onclick="go('today')"><span class="ic">📋</span>Сегодня</button>
   <button data-tab="meds" onclick="go('meds')"><span class="ic">💊</span>Лекарства</button>
-  <button data-tab="add" onclick="go('add')"><span class="ic">➕</span>Добавить</button>
-  <button data-tab="labs" onclick="go('labs')"><span class="ic">📈</span>Анализы</button>
+  <button data-tab="fit" onclick="go('fit')"><span class="ic">🏋️</span>Тренировки</button>
+  <button data-tab="food" onclick="go('food')"><span class="ic">🥗</span>Питание</button>
   <button data-tab="set" onclick="go('set')"><span class="ic">⚙️</span>Ещё</button>
 </nav>
 
@@ -341,12 +400,15 @@ const LS_AIKEY='pills.ai.key';
 const LS_LABS='pills.labs.v1';
 let labData=load(LS_LABS,[]);   // [{rid,test_date,analyte,analyte_key,value,value_text,unit,ref_low,ref_high,ref_text,source}]
 let labParsed=[];
+const LS_FOOD='pills.food.v1';
+let meals=load(LS_FOOD,[]);     // [{id,time,name,items,kcal}] — приёмы пищи на день
+let foodParsed=[];
 let labCat='Все';   // выбранная группа анализов на вкладке «Анализы»
 // Публичный VAPID-ключ для Web Push (приватный — только на сервере)
 const VAPID_PUBLIC='BOmcmS3mCnjYqlLy9NNxeQ5nbzz9naDtJ-is2oGc2Uy1DuocvYnvsMxLXlLPj0ibvtsHIRiHGcSGYoJ0zL-5tTY';
 
 function load(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
-function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));stateT=Date.now();localStorage.setItem(LS_T,String(stateT));schedulePush();}
+function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));localStorage.setItem(LS_FOOD,JSON.stringify(meals));stateT=Date.now();localStorage.setItem(LS_T,String(stateT));schedulePush();}
 function uid(){return Math.random().toString(36).slice(2,9)}
 function todayKey(d=new Date()){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
@@ -458,8 +520,16 @@ function dayRows(){
 /* ---------- ОТРИСОВКА ---------- */
 function nowHM(){let d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
 
+function todayRows(){   // лекарства и приёмы пищи вперемешку, по времени
+  let rows=dayRows().map(r=>({type:'med',tm:r.tm,key:r.key,ic:'💊',
+    name:r.m.name, sub:(r.m.dose||'приём')+(r.m.note?' · '+r.m.note:'')}));
+  foodRows().forEach(r=>rows.push({type:'food',tm:r.tm,key:r.key,ic:'🥗',
+    name:r.f.name, sub:(r.f.items||'')+(r.f.kcal?(r.f.items?' · ':'')+r.f.kcal+' ккал':'')}));
+  rows.sort((a,b)=>a.tm.localeCompare(b.tm)||a.type.localeCompare(b.type));
+  return rows;
+}
 function renderToday(){
-  let rows=dayRows();
+  let rows=todayRows();
   let cont=document.getElementById('todayList');
   let bn=document.getElementById('nextBanner');
   let nh=nowHM();
@@ -467,17 +537,17 @@ function renderToday(){
   let next=rows.find(r=>!log[r.key] && r.tm>=nh) || rows.find(r=>!log[r.key]);
   if(rows.length===0){
     bn.innerHTML='';
-    cont.innerHTML='<div class="empty-state"><div class="em">💊</div><p>Пока нет лекарств.<br>Открой «Добавить» и вставь текст с назначениями.</p></div>';
+    cont.innerHTML='<div class="empty-state"><div class="em">📋</div><p>На сегодня пусто.<br>Открой ⚙️ «Ещё» → «Добавить» —<br>лекарства или меню питания.</p></div>';
     return;
   }
   let done=rows.filter(r=>log[r.key]).length;
   if(next){
-    bn.innerHTML=`<div class="banner"><div class="lbl">Следующий приём</div>
-      <div class="big">${esc(next.m.name)} — ${next.tm}</div>
-      <div class="sub">${esc(next.m.dose||'')}${next.m.note?' · '+esc(next.m.note):''}</div></div>`;
+    bn.innerHTML=`<div class="banner"><div class="lbl">${next.type==='food'?'Следующий приём пищи':'Следующий приём'}</div>
+      <div class="big">${next.ic} ${esc(next.name)} — ${next.tm}</div>
+      <div class="sub">${esc(next.sub)}</div></div>`;
   } else {
     bn.innerHTML=`<div class="banner empty"><div class="lbl">Готово</div>
-      <div class="big" style="color:var(--green)">Всё выпито на сегодня ✓</div>
+      <div class="big" style="color:var(--green)">Всё выполнено на сегодня ✓</div>
       <div class="sub">${done} из ${rows.length}</div></div>`;
   }
   cont.innerHTML='<div class="card">'+rows.map(r=>{
@@ -486,8 +556,9 @@ function renderToday(){
     let diff=hmDiff(r.tm,nh); if(!dn && diff>=0 && diff<=60)cls='soon';
     return `<div class="row ${dn?'done':''}">
       <div class="check ${dn?'done':''}" onclick="toggle('${r.key}')">${dn?'✓':''}</div>
-      <div class="info"><div class="nm">${esc(r.m.name)}</div>
-        <div class="ds">${esc(r.m.dose||'приём')}${r.m.note?' · '+esc(r.m.note):''}</div></div>
+      <span class="tp">${r.ic}</span>
+      <div class="info"><div class="nm">${esc(r.name)}</div>
+        <div class="ds">${esc(r.sub)}</div></div>
       <div class="time ${cls}">${r.tm}</div>
     </div>`;
   }).join('')+'</div>';
@@ -534,7 +605,7 @@ function esc(s){return String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;
 function escAttr(s){return String(s??'').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
 
 /* ---------- ДЕЙСТВИЯ ---------- */
-function toggle(key){ if(log[key])delete log[key]; else log[key]=true; save(); renderToday();
+function toggle(key){ if(log[key])delete log[key]; else log[key]=true; save(); renderToday(); renderFood();
   if(navigator.vibrate)navigator.vibrate(8); }
 function delMed(id){ meds=meds.filter(m=>m.id!==id); save(); renderMeds(); renderToday(); toast('Удалено'); }
 
@@ -566,8 +637,30 @@ document.getElementById('btnCancelParsed').onclick=()=>{
   parsed=[];document.getElementById('previewWrap').classList.add('hidden');
 };
 
+document.getElementById('btnFoodParse').onclick=()=>{
+  let raw=document.getElementById('foodText').value;
+  if(!raw.trim()){toast('Сначала вставь меню');return}
+  foodParsed=parseFood(raw);
+  if(!foodParsed.length){toast('Не удалось разобрать');return}
+  document.getElementById('foodPreviewWrap').classList.remove('hidden');
+  renderFoodParsed();
+  document.getElementById('foodPreviewWrap').scrollIntoView({behavior:'smooth'});
+};
+document.getElementById('btnSaveFoodParsed').onclick=()=>{
+  foodParsed.forEach(f=>{if(!f.time)f.time='12:00'; if(!f.name)f.name='Приём пищи';});
+  meals=meals.concat(foodParsed); foodParsed=[];
+  save(); renderFood(); renderToday();
+  document.getElementById('foodText').value='';
+  document.getElementById('foodPreviewWrap').classList.add('hidden');
+  toast('Меню сохранено ✓'); go('food');
+};
+document.getElementById('btnCancelFoodParsed').onclick=()=>{
+  foodParsed=[];document.getElementById('foodPreviewWrap').classList.add('hidden');
+};
+
 function resetToday(){ let tk=todayKey(); Object.keys(log).forEach(k=>{if(k.startsWith(tk+'|'))delete log[k]}); save(); renderToday(); toast('Отметки сброшены'); }
-function wipeAll(){ if(confirm('Удалить все лекарства и отметки?')){meds=[];log={};save();renderMeds();renderToday();toast('Очищено')} }
+function wipeAll(){ if(confirm('Удалить все лекарства и отметки?')){meds=[];log={};save();renderMeds();renderToday();renderFood();toast('Очищено')} }
+function wipeFood(){ if(confirm('Удалить все приёмы пищи?')){meals=[];save();renderFood();renderToday();toast('Меню очищено')} }
 
 /* ---------- СИНХРОНИЗАЦИЯ УСТРОЙСТВ ---------- */
 function setSync(s){let e=document.getElementById('syncState'); if(e){e.textContent=s; e.className='pill-state'+(s==='✓'?' on':'');}}
@@ -581,7 +674,7 @@ async function rpc(fn,body){
 function schedulePush(){ if(!syncCode)return; clearTimeout(pushTimer); pushTimer=setTimeout(cloudPush,1200); }
 async function cloudPush(){
   if(!syncCode)return;
-  try{ setSync('…'); await rpc('pill_save',{p_code:syncCode,p_data:{meds,log,_t:stateT}}); setSync('✓'); }
+  try{ setSync('…'); await rpc('pill_save',{p_code:syncCode,p_data:{meds,meals,log,_t:stateT}}); setSync('✓'); }
   catch(e){ setSync('!'); }
 }
 async function cloudPull(silent){
@@ -593,14 +686,16 @@ async function cloudPull(silent){
       let ct=+d._t||0;
       if(ct>stateT){
         if(Array.isArray(d.meds))meds=d.meds;
+        if(Array.isArray(d.meals))meals=d.meals;
         if(d.log&&typeof d.log==='object')log=d.log;
         stateT=ct;
         localStorage.setItem(LS_MEDS,JSON.stringify(meds));
+        localStorage.setItem(LS_FOOD,JSON.stringify(meals));
         localStorage.setItem(LS_LOG,JSON.stringify(log));
         localStorage.setItem(LS_T,String(stateT));
-        renderToday(); renderMeds();
+        renderToday(); renderMeds(); renderFood();
       } else if(stateT>ct){ cloudPush(); }
-    } else if(meds.length){ cloudPush(); }
+    } else if(meds.length||meals.length){ cloudPush(); }
     setSync('✓');
   }catch(e){ setSync('!'); }
 }
@@ -865,12 +960,12 @@ function labCard(rows,ck){
     +'<div class="lab-dots">'+dots+'</div></div>';
 }
 
-// переключатель в разделе «Добавить»: Лекарства / Анализы
+// переключатель в разделе «Добавить»: Лекарства / Питание / Анализы
 function setAddMode(m){
-  document.getElementById('add-meds').classList.toggle('hidden',m!=='meds');
-  document.getElementById('add-labs').classList.toggle('hidden',m!=='labs');
-  document.getElementById('addtab-meds').classList.toggle('on',m==='meds');
-  document.getElementById('addtab-labs').classList.toggle('on',m==='labs');
+  ['meds','food','labs'].forEach(k=>{
+    document.getElementById('add-'+k).classList.toggle('hidden',k!==m);
+    document.getElementById('addtab-'+k).classList.toggle('on',k===m);
+  });
   if(m==='labs'){let h=document.getElementById('labKeyHint');if(h)h.style.display=(localStorage.getItem(LS_AIKEY)?'none':'block');}
 }
 
@@ -1010,15 +1105,126 @@ function checkReminders(){
   });
 }
 
+/* ---------- ПИТАНИЕ ---------- */
+// если время не написано — подставляем привычное для этого приёма пищи
+const MEAL_TIME={'завтрак':'08:00','второй завтрак':'11:00','обед':'13:00',
+  'полдник':'16:00','перекус':'16:00','ужин':'19:00','поздний ужин':'21:00'};
+
+function parseFoodLine(line){
+  let s=String(line||'').trim(); if(!s)return null;
+  let time='';
+  let mt=s.match(/(^|[\s(\[])([0-2]?\d)[:.]([0-5]\d)(?!\d)/);     // 08:00 / 8.30
+  if(mt){ time=pad2(+mt[2])+':'+mt[3]; s=(s.slice(0,mt.index)+' '+s.slice(mt.index+mt[0].length)).trim(); }
+  let kcal=null;
+  let mk=s.match(/(\d{2,5})\s*(?:ккал|kcal|калори[а-я]*)/i);
+  if(mk){ kcal=+mk[1]; s=(s.slice(0,mk.index)+' '+s.slice(mk.index+mk[0].length)).trim(); }
+  s=s.replace(/^\d+[).]\s*/,'').replace(/^[\s\-–—•*·]+/,'').replace(/[\s,;:–—-]+$/,'').trim();
+  if(!s)return null;
+  let name='', items='';
+  let known=s.match(/^(второй завтрак|поздний ужин|завтрак|обед|ужин|перекус|полдник)(?![а-яё])[\s—–:,-]*/i);
+  if(known){ name=known[1]; items=s.slice(known[0].length).trim(); }
+  else {
+    let parts=s.split(/\s+[—–]\s+|\s+-\s+|:\s+/);
+    if(parts.length>1){ name=parts[0].trim(); items=parts.slice(1).join(' — ').trim(); }
+    else { name=(s.split(/[,.]/)[0]||'').trim().slice(0,40)||'Приём пищи'; items=(s===name?'':s); }
+  }
+  name=name.charAt(0).toUpperCase()+name.slice(1);
+  if(!time) time=MEAL_TIME[name.toLowerCase()]||'12:00';
+  return {id:'f'+uid(), time:time, name:name, items:items, kcal:kcal};
+}
+function parseFood(raw){ return String(raw||'').split(/\r?\n/).map(parseFoodLine).filter(Boolean); }
+
+function foodRows(){
+  return meals.slice()
+    .sort((a,b)=>String(a.time||'').localeCompare(String(b.time||'')))
+    .map(f=>({f:f, tm:f.time||'', key:todayKey()+'|'+f.id+'|'+(f.time||'')}));
+}
+function mealSub(f){ return esc(f.items||'')+(f.kcal?(f.items?' · ':'')+f.kcal+' ккал':''); }
+
+function renderFood(){
+  let c=document.getElementById('foodList'), bn=document.getElementById('foodBanner');
+  if(!c||!bn)return;
+  let rows=foodRows();
+  if(!rows.length){
+    bn.innerHTML='';
+    c.innerHTML='<div class="empty-state"><div class="em">🥗</div><p>Меню пока пустое.<br>Открой ⚙️ «Ещё» → «Добавить» → «Питание»<br>и вставь свой рацион.</p></div>';
+    return;
+  }
+  let nh=nowHM();
+  let eaten=rows.filter(r=>log[r.key]).length;
+  let kcalAll=rows.reduce((a,r)=>a+(+r.f.kcal||0),0);
+  let kcalEat=rows.reduce((a,r)=>a+(log[r.key]?(+r.f.kcal||0):0),0);
+  let next=rows.find(r=>!log[r.key]&&r.tm>=nh)||rows.find(r=>!log[r.key]);
+  bn.innerHTML = next
+    ? `<div class="banner"><div class="lbl">Следующий приём пищи</div>
+        <div class="big">${esc(next.f.name)} — ${next.tm}</div>
+        <div class="sub">${mealSub(next.f)}</div></div>`
+    : `<div class="banner empty"><div class="lbl">Готово</div>
+        <div class="big" style="color:var(--green)">Меню на сегодня выполнено ✓</div>
+        <div class="sub">${eaten} из ${rows.length}${kcalAll?' · '+kcalEat+' ккал':''}</div></div>`;
+  c.innerHTML='<div class="card">'+rows.map(r=>{
+    let dn=!!log[r.key];
+    let cls=''; if(r.tm<nh && !dn)cls='past';
+    let diff=hmDiff(r.tm||'00:00',nh); if(!dn && diff>=0 && diff<=60)cls='soon';
+    return `<div class="row ${dn?'done':''}">
+      <div class="check ${dn?'done':''}" onclick="toggle('${r.key}')">${dn?'✓':''}</div>
+      <div class="info"><div class="nm">${esc(r.f.name)}</div>
+        <div class="ds">${mealSub(r.f)}</div></div>
+      <div class="time ${cls}">${r.tm}</div>
+      <button class="iconbtn" onclick="delMeal('${r.f.id}')">🗑</button>
+    </div>`;
+  }).join('')+'</div>'
+  +'<div class="sum">'+(kcalAll?('Съедено '+kcalEat+' из '+kcalAll+' ккал · '):'')+eaten+' из '+rows.length+' приёмов</div>';
+}
+function delMeal(id){ meals=meals.filter(f=>f.id!==id); save(); renderFood(); renderToday(); toast('Удалено'); }
+
+function renderFoodParsed(){
+  let c=document.getElementById('foodParsedList');
+  c.innerHTML=foodParsed.map((f,i)=>`
+    <div class="pp">
+      <input class="pnm" value="${escAttr(f.name)}" oninput="foodParsed[${i}].name=this.value">
+      <div class="pr">
+        <label>время:</label>
+        <input type="time" style="width:120px" value="${escAttr(f.time)}" onchange="foodParsed[${i}].time=this.value">
+        <label>ккал:</label>
+        <input type="number" min="0" style="width:90px" value="${f.kcal??''}" placeholder="—" oninput="foodParsed[${i}].kcal=this.value?parseInt(this.value):null">
+      </div>
+      <div class="pr">
+        <input type="text" style="flex:1;min-width:140px" value="${escAttr(f.items)}" placeholder="что едим" oninput="foodParsed[${i}].items=this.value">
+      </div>
+      <button class="pdel" onclick="foodParsed.splice(${i},1);renderFoodParsed()">Убрать этот приём</button>
+    </div>`).join('');
+}
+
+/* ---------- ТРЕНИРОВКИ (заготовка) ----------
+   Раздел уже в меню и открывается. Чтобы наполнить его, нужны четыре вещи —
+   ровно как сделано для питания:
+     1) хранилище:      const LS_FIT='pills.fit.v1'; let workouts=load(LS_FIT,[]);
+     2) разбор текста:  parseFitLine() — по образцу parseFoodLine();
+     3) отрисовка:      renderFit() ниже + строки в todayRows();
+     4) синхронизация:  workouts в save(), cloudPush() и cloudPull().            */
+function renderFit(){
+  let c=document.getElementById('fitList'); if(!c)return;
+  c.innerHTML='<div class="empty-state"><div class="em">🏋️</div>'
+    +'<p>Раздел готов — осталось наполнить.<br><br>'
+    +'Напиши, как ведёшь тренировки: план на неделю,<br>'
+    +'отметки «сделал» по дням или подходы и веса —<br>'
+    +'сделаю так же, как «Питание».</p></div>';
+}
+
 /* ---------- НАВИГАЦИЯ ---------- */
-const TITLES={today:'Сегодня',meds:'Лекарства',add:'Добавить',labs:'Анализы',set:'Настройки'};
+const TITLES={today:'Сегодня',meds:'Лекарства',fit:'Тренировки',food:'Питание',add:'Добавить',labs:'Анализы',set:'Настройки'};
+const VIEWS=['today','meds','fit','food','add','labs','set'];
+const NAVOF={add:'set',labs:'set'};   // «Добавить» и «Анализы» живут внутри «Ещё»
 function go(tab){
-  ['today','meds','add','labs','set'].forEach(t=>{
+  VIEWS.forEach(t=>{
     document.getElementById('v-'+t).classList.toggle('hidden',t!==tab);
   });
-  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  let nb=NAVOF[tab]||tab;
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===nb));
   document.getElementById('hTitle').textContent=TITLES[tab];
-  if(tab==='today')renderToday(); if(tab==='meds')renderMeds(); if(tab==='labs'){renderLabs();labLoad();} if(tab==='set'){updNotifState();aiStateUpd();}
+  if(tab==='today')renderToday(); if(tab==='meds')renderMeds(); if(tab==='food')renderFood(); if(tab==='fit')renderFit();
+  if(tab==='labs'){renderLabs();labLoad();} if(tab==='set'){updNotifState();aiStateUpd();}
   window.scrollTo(0,0);
 }
 
@@ -1029,7 +1235,7 @@ function setDate(){
   let mon=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
   document.getElementById('hDate').textContent=days[d.getDay()]+', '+d.getDate()+' '+mon[d.getMonth()];
 }
-setDate(); renderToday(); updNotifState();
+setDate(); renderToday(); renderFood(); updNotifState();
 checkReminders();
 // при старте обновляем подписку на push (часовой пояс/endpoint могли смениться)
 if('Notification'in window&&Notification.permission==='granted'){setTimeout(()=>subscribeForPush(),1500);}
