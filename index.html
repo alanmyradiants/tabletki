@@ -152,6 +152,8 @@
   .plan .x{color:var(--line);font-weight:800}
   .setdot.add{border-style:dashed;font-size:16px}
   .grow{margin-top:6px;font-size:12.5px;font-weight:700;color:var(--green-d);line-height:1.4}
+  .plan input.sug{border-color:var(--green);color:var(--green-d);background:#f1faf6}
+  .sugline{margin-top:6px;font-size:12px;font-weight:700;color:var(--green-d);line-height:1.4;cursor:pointer}
   .ex+.ex{border-top:1px solid var(--line)}
   .ex .top{display:flex;align-items:flex-start;gap:10px}
   .ex .nm{font-size:16.5px;font-weight:700;flex:1;min-width:0;cursor:pointer;line-height:1.25}
@@ -519,7 +521,7 @@ let labCat='Все';   // выбранная группа анализов на 
 const VAPID_PUBLIC='BOmcmS3mCnjYqlLy9NNxeQ5nbzz9naDtJ-is2oGc2Uy1DuocvYnvsMxLXlLPj0ibvtsHIRiHGcSGYoJ0zL-5tTY';
 
 function load(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
-function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));localStorage.setItem(LS_FOOD,JSON.stringify(meals));localStorage.setItem(LS_FIT,JSON.stringify(workouts));localStorage.setItem(LS_FITLOG,JSON.stringify(fitLog));localStorage.setItem(LS_FITG,JSON.stringify(fitGroups));localStorage.setItem(LS_FITDATE,fitDate);localStorage.setItem(LS_FITSTEP,String(fitStep));stateT=Date.now();localStorage.setItem(LS_T,String(stateT));schedulePush();}
+function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));localStorage.setItem(LS_FOOD,JSON.stringify(meals));localStorage.setItem(LS_FIT,JSON.stringify(workouts));localStorage.setItem(LS_FITLOG,JSON.stringify(fitLog));localStorage.setItem(LS_FITG,JSON.stringify(fitGroups));localStorage.setItem(LS_FITDATE,fitDate);localStorage.setItem(LS_FITSTEP,String(fitStep));localStorage.setItem(LS_FITUP,String(fitUp));stateT=Date.now();localStorage.setItem(LS_T,String(stateT));schedulePush();}
 function uid(){return Math.random().toString(36).slice(2,9)}
 function todayKey(d=new Date()){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
@@ -829,7 +831,7 @@ async function rpc(fn,body){
 function schedulePush(){ if(!syncCode)return; clearTimeout(pushTimer); pushTimer=setTimeout(cloudPush,1200); }
 async function cloudPush(){
   if(!syncCode)return;
-  try{ setSync('…'); await rpc('pill_save',{p_code:syncCode,p_data:{meds,meals,workouts,log,fitLog,fitCur,fitGroups,fitDate,fitStep,_t:stateT}}); setSync('✓'); }
+  try{ setSync('…'); await rpc('pill_save',{p_code:syncCode,p_data:{meds,meals,workouts,log,fitLog,fitCur,fitGroups,fitDate,fitStep,fitUp,_t:stateT}}); setSync('✓'); }
   catch(e){ setSync('!'); }
 }
 async function cloudPull(silent){
@@ -848,6 +850,7 @@ async function cloudPull(silent){
         if(d.fitGroups&&typeof d.fitGroups==='object')fitGroups=d.fitGroups;
         if(typeof d.fitDate==='string')fitDate=d.fitDate;
         if(+d.fitStep)fitStep=+d.fitStep;
+        if(+d.fitUp)fitUp=+d.fitUp;
         if(d.log&&typeof d.log==='object')log=d.log;
         stateT=ct;
         localStorage.setItem(LS_MEDS,JSON.stringify(meds));
@@ -858,6 +861,7 @@ async function cloudPull(silent){
         localStorage.setItem(LS_FITG,JSON.stringify(fitGroups));
         localStorage.setItem(LS_FITDATE,fitDate);
         localStorage.setItem(LS_FITSTEP,String(fitStep));
+        localStorage.setItem(LS_FITUP,String(fitUp));
         localStorage.setItem(LS_LOG,JSON.stringify(log));
         localStorage.setItem(LS_T,String(stateT));
         renderToday(); renderMeds(); renderFood(); renderFit();
@@ -1627,6 +1631,32 @@ function exDone(w){
   if(!w.sets) return !!e.d;
   return (e.s||[]).filter(Boolean).length>=w.sets;
 }
+const LS_FITUP='pills.fitup';
+let fitUp=parseFloat(localStorage.getItem(LS_FITUP))||2.5;   // на сколько поднимать вес
+function setFitUp(){
+  let v=prompt('На сколько килограммов поднимать вес, когда первый подход зашёл на 10–12?', fitUp);
+  if(v===null)return;
+  let n=parseFloat(String(v).replace(',','.'));
+  if(!isFinite(n)||n<=0||n>20)return;
+  fitUp=n; localStorage.setItem(LS_FITUP,String(fitUp)); save(); renderFit();
+}
+function lastSession(id){            // прошлая тренировка с этим упражнением
+  let tk=todayKey(), best=null, bd='';
+  Object.keys(fitLog).forEach(k=>{
+    let i=k.indexOf('|'); if(k.slice(i+1)!==id)return;
+    let dt=k.slice(0,i); if(dt>=tk)return;
+    let e=fitLog[k]; if(!e||e.w==null)return;
+    if(dt>bd){ bd=dt; best=e; }
+  });
+  return best?{d:bd,e:best}:null;
+}
+function suggestWeight(w){           // правило тренера: 10-12 в первом подходе — прибавляем
+  let ls=lastSession(w.id); if(!ls)return null;
+  let first=(ls.e.s||[])[0];
+  let up=(typeof first==='number' && first>=10);
+  return { kg: up ? Math.round((ls.e.w+fitUp)*10)/10 : ls.e.w,
+           up: up, prev: ls.e.w, reps: (typeof first==='number'?first:null), date: ls.d };
+}
 function lastWeight(id){
   let tk=todayKey(), best=null, bd='';
   Object.keys(fitLog).forEach(k=>{
@@ -1657,8 +1687,16 @@ function fitUseDay(id){        // отмечаешь в другом дне — 
   let d=+w.d||1;
   if(d!==fitCur){ fitCur=d; localStorage.setItem(LS_FITCUR,String(fitCur)); }
 }
+function acceptSuggest(id){          // первый тап по подходу подтверждает предложенный вес
+  let w=workouts.find(x=>x.id===id); if(!w)return;
+  let e=fitTouch(id);
+  if(e.w!=null)return;
+  let sug=suggestWeight(w);
+  if(sug){ e.w=sug.kg; w.weight=sug.kg; }
+  else if(w.weight!=null){ e.w=w.weight; }
+}
 function toggleSet(id,i){
-  fitUseDay(id);
+  fitUseDay(id); acceptSuggest(id);
   let e=fitTouch(id); e.s=e.s||[];
   while(e.s.length<=i)e.s.push(false);
   if(e.s[i]){ e.s[i]=false; }                       // повторный тап снимает отметку
@@ -1674,7 +1712,7 @@ function toggleSet(id,i){
   fitCheckDone();
 }
 function toggleExAll(id){        // отметить упражнение целиком, не тыкая каждый подход
-  fitUseDay(id);
+  fitUseDay(id); acceptSuggest(id);
   let w=workouts.find(x=>x.id===id); if(!w)return;
   let e=fitTouch(id);
   if(exDone(w)){ e.s=[]; e.d=false; }                       // снять отметку
@@ -1908,7 +1946,8 @@ function renderFit(){
   c.innerHTML='<div class="card">'+rows.map(w=>{
     let e=fitEntry(w.id)||{}, dn=exDone(w);
     let last=lastWeight(w.id);
-    let kg=(e.w!=null?e.w:(w.weight!=null?w.weight:null));
+    let sug=(e.w==null)?suggestWeight(w):null;                 // свой вес ещё не вписан
+    let kg=(e.w!=null?e.w:(sug?sug.kg:(w.weight!=null?w.weight:null)));
     // миниатюра ролика слева: тап — смотреть, подпись под ней — заменить
     let thumb;
     if(w.video){
@@ -1937,7 +1976,16 @@ function renderFit(){
     let hints=[];
     let wu=warmup(kg);
     if(wu)hints.push('подводящий: '+wu+' кг × 8');
-    if(last)hints.push('прошлый раз '+last.w+' кг');
+    if(last&&!sug)hints.push('прошлый раз '+last.w+' кг');
+    let sugline='';
+    if(sug){
+      sugline='<div class="sugline" onclick="setFitUp()">'
+        +(sug.up ? ('подсказка: +'+fitUp+' кг к прошлому весу — в прошлый раз '+sug.prev+' кг × '+sug.reps+' повторов')
+                 : ('подсказка: тот же вес '+sug.prev+' кг — '
+                    +(sug.reps!=null?('в первом подходе было '+sug.reps+', до 10 не дотянул')
+                                    :'повторы в прошлый раз не записаны')))
+        +' <span class="edit">✎</span></div>';
+    }
     let reps=(e.s||[]).filter(x=>typeof x==='number');
     if(reps.length)hints.push('повторы: '+reps.join(' · '));
     let grow=(typeof (e.s||[])[0]==='number' && e.s[0]>=10)
@@ -1962,8 +2010,9 @@ function renderFit(){
               onchange="setPlan('${w.id}','reps',this.value)" aria-label="Повторы"><span>раз</span>
             <span class="x">·</span>
             <input type="number" min="0" step="0.5" inputmode="decimal" value="${kg!=null?kg:''}" placeholder="—"
-              onchange="setPlan('${w.id}','weight',this.value)" aria-label="Вес"><span>кг</span>
+              class="${sug?'sug':''}" onchange="setPlan('${w.id}','weight',this.value)" aria-label="Вес"><span>кг</span>
           </div>
+          ${sugline}
           ${dots?`<div class="setrow">${dots}</div>`:''}
           ${hints.length?`<div class="meta">${hints.join(' · ')}</div>`:''}
           ${grow}
@@ -1982,7 +2031,9 @@ function renderFit(){
     + (fitDateEnsure()===todayKey()?'Сегодня ':'Следующая '+dShort(fitDate)+' · ')
     + (fitStep===1?'каждый день':(fitStep===2?'через день':'через '+(fitStep-1)+' дня'))
     + ' <span class="edit">изменить ✎</span></div>'
-  + '<div class="rules">Дни идут по датам: закрыл тренировку — следующая встаёт на нужное число сама.<br>'
+  + '<div class="rules">Вес зелёным — подсказка приложения по прошлой тренировке, а не твоя цифра.<br>'
+  + 'Отметил подход — подсказка принимается; хочешь другой вес, впиши поверх.<br>'
+  + 'Дни идут по датам: закрыл тренировку — следующая встаёт на нужное число сама.<br>'
   + 'Галочка справа от названия отмечает всё упражнение разом; кружки — по подходам.<br>'
   + 'Подходы, повторы и вес правятся прямо в карточке; ＋ и − меняют число подходов.<br>'
   + 'Тап по кружку спрашивает, сколько повторов вышло; можно пропустить — тогда это просто отметка.<br><br>'
@@ -2036,7 +2087,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 19:54 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 20:29 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
