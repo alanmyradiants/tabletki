@@ -427,7 +427,7 @@
     <div id="fitDays" class="labcats"></div>
     <div id="fitBanner"></div>
     <div id="fitList"></div>
-    <input type="file" id="fitVideoFile" accept="video/*" style="display:none" onchange="fitVideoPicked(this)">
+    <input type="file" id="fitVideoFile" accept="video/*" style="position:absolute;left:-9999px;top:0;width:1px;height:1px;opacity:0" onchange="fitVideoPicked(this)">
   </section>
 
   <!-- FOOD -->
@@ -1795,7 +1795,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 09:30 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 09:40 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
