@@ -1501,7 +1501,9 @@ function addSet(id,delta){
   let w=workouts.find(x=>x.id===id); if(!w)return;
   let n=(w.sets||0)+delta;
   if(n<1||n>12)return;
-  w.sets=n; save(); renderFit();
+  w.sets=n;
+  if(delta<0){ let e=fitEntry(id); if(e&&e.s&&e.s.length>n)e.s=e.s.slice(0,n); }  // лишняя отметка не остаётся
+  save(); renderFit(); renderToday();
 }
 function setSets(id){
   let w=workouts.find(x=>x.id===id); if(!w)return;
@@ -1859,6 +1861,8 @@ function renderFit(){
           dots+='<button class="setdot'+(on?' on':'')+'" onclick="toggleSet(\''+w.id+'\','+i+')">'
             +(typeof on==='number'?on:(on?'✓':(i+1)))+'</button>';
         }
+        if(w.sets>1)
+          dots+='<button class="setdot add" onclick="addSet(\''+w.id+'\',-1)" aria-label="Убрать подход">−</button>';
         dots+='<button class="setdot add" onclick="addSet(\''+w.id+'\',1)" aria-label="Добавить подход">＋</button>';
       } else {
         dots+='<button class="setdot'+(e.d?' on':'')+'" onclick="toggleEx(\''+w.id+'\')">'+(e.d?'✓':'—')+'</button>';
@@ -1906,7 +1910,7 @@ function renderFit(){
   + (isCur
       ? '<button class="btn ghost" onclick="fitSkip()">Следующая тренировка →</button>'
       : '<button class="btn ghost" onclick="setFitCur('+fitView+')">Сделать текущей</button>')
-  + '<div class="rules">Подходы, повторы и вес правятся прямо в карточке; ＋ добавляет лишний подход.<br>'
+  + '<div class="rules">Подходы, повторы и вес правятся прямо в карточке; ＋ и − меняют число подходов.<br>'
   + 'Тап по кружку спрашивает, сколько повторов вышло; можно пропустить — тогда это просто отметка.<br><br>'
   + 'Все подходы — в отказ, с одним рабочим весом.<br>'
   + 'Перед рабочими один подводящий: 60–65 % от рабочего, 8 повторов — в счёт не идёт.<br>'
@@ -1958,7 +1962,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 19:25 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 19:30 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
