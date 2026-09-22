@@ -126,8 +126,10 @@
   .ex{padding:12px 10px;border-radius:14px}
   .ex.done{background:#f1faf6}
   .ex.done .nm{color:var(--muted);text-decoration:line-through}
-  .okbadge{flex:0 0 auto;width:23px;height:23px;border-radius:50%;background:var(--green);color:#06231b;
-    font-size:13px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .okbadge{flex:0 0 auto;width:28px;height:28px;border-radius:50%;border:2px solid var(--line);
+    background:none;color:var(--line);font-size:14px;font-weight:900;font-family:inherit;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;margin-top:-1px;padding:0}
+  .okbadge.on{background:var(--green);border-color:var(--green);color:#06231b}
   .exrow{display:flex;gap:12px;align-items:flex-start}
   .vcol{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px}
   .vthumb{position:relative;width:76px;height:101px;border:none;padding:0;border-radius:12px;overflow:hidden;
@@ -1636,6 +1638,18 @@ function toggleSet(id,i){
   if(navigator.vibrate)navigator.vibrate(8);
   fitCheckDone();
 }
+function toggleExAll(id){        // отметить упражнение целиком, не тыкая каждый подход
+  fitUseDay(id);
+  let w=workouts.find(x=>x.id===id); if(!w)return;
+  let e=fitTouch(id);
+  if(exDone(w)){ e.s=[]; e.d=false; }                       // снять отметку
+  else if(w.sets){ e.s=e.s||[];
+    for(let i=0;i<w.sets;i++) if(!e.s[i]) e.s[i]=true;      // введённые повторы сохраняем
+  } else e.d=true;
+  save(); renderFit(); renderToday();
+  if(navigator.vibrate)navigator.vibrate(8);
+  fitCheckDone();
+}
 function toggleEx(id){ fitUseDay(id); let e=fitTouch(id); e.d=!e.d; save(); renderFit(); renderToday();
   if(navigator.vibrate)navigator.vibrate(8); fitCheckDone(); }
 function setWeight(id,v){
@@ -1893,7 +1907,8 @@ function renderFit(){
         <div class="exbody">
           <div class="top">
             <div class="nm" onclick="renameEx('${w.id}')">${esc(w.name)}</div>
-            ${dn?'<span class="okbadge" aria-label="Сделано">✓</span>':''}
+            <button class="okbadge${dn?' on':''}" onclick="toggleExAll('${w.id}')"
+              aria-label="${dn?'Снять отметку':'Отметить сделанным'}">✓</button>
             <button class="iconbtn" onclick="moveEx('${w.id}',-1)" aria-label="Выше">↑</button>
             <button class="iconbtn" onclick="moveEx('${w.id}',1)" aria-label="Ниже">↓</button>
             <button class="iconbtn" onclick="delEx('${w.id}')" aria-label="Удалить">🗑</button>
@@ -1922,7 +1937,8 @@ function renderFit(){
   + (isCur
       ? '<button class="btn ghost" onclick="fitSkip()">Следующая тренировка →</button>'
       : '<button class="btn ghost" onclick="setFitCur('+fitView+')">Сделать текущей</button>')
-  + '<div class="rules">Подходы, повторы и вес правятся прямо в карточке; ＋ и − меняют число подходов.<br>'
+  + '<div class="rules">Галочка справа от названия отмечает всё упражнение разом; кружки — по подходам.<br>'
+  + 'Подходы, повторы и вес правятся прямо в карточке; ＋ и − меняют число подходов.<br>'
   + 'Тап по кружку спрашивает, сколько повторов вышло; можно пропустить — тогда это просто отметка.<br><br>'
   + 'Все подходы — в отказ, с одним рабочим весом.<br>'
   + 'Перед рабочими один подводящий: 60–65 % от рабочего, 8 повторов — в счёт не идёт.<br>'
@@ -1974,7 +1990,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 19:41 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 19:46 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
