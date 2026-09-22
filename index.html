@@ -199,9 +199,17 @@
     padding:14px 16px;display:flex;align-items:center;gap:8px;font-family:inherit;font-size:14.5px;
     font-weight:700;color:var(--text);cursor:pointer;text-align:left}
   .calbar .sub{margin-left:auto;color:var(--muted);font-size:12.5px;white-space:nowrap}
-  .cal{margin:0 4px 14px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 10px}
+  .cal{margin:0 4px 14px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 10px;
+    touch-action:pan-y;overflow:hidden}         /* pan-y: вертикаль листает страницу, горизонталь — месяцы */
   .calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-  .calhead b{font-size:15px;font-weight:800}
+  .calmon{background:none;border:none;font-family:inherit;font-size:15px;font-weight:800;color:var(--text);
+    padding:4px 10px;border-radius:9px;cursor:pointer}
+  @keyframes calNext{from{opacity:0;transform:translateX(26px)}to{opacity:1;transform:none}}
+  @keyframes calPrev{from{opacity:0;transform:translateX(-26px)}to{opacity:1;transform:none}}
+  .cal.next .calgrid,.cal.next .calmon{animation:calNext .2s ease-out}
+  .cal.prev .calgrid,.cal.prev .calmon{animation:calPrev .2s ease-out}
+  @media (prefers-reduced-motion:reduce){
+    .cal.next .calgrid,.cal.next .calmon,.cal.prev .calgrid,.cal.prev .calmon{animation:none}}
   .calnav{background:var(--card2);border:none;border-radius:10px;width:34px;height:34px;font-size:17px;
     color:var(--text);cursor:pointer;font-family:inherit}
   .calgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0}
@@ -2130,13 +2138,23 @@ function gShort(d){                    // «Спина + трицепс» → «
   let g=lc(fitGroup(d)||''); if(!g)return '';
   return g.split(/[\s+,]+/)[0];
 }
+let calAnim='';                        // направление анимации при перелистывании
+let calSwipeAt=0;                      // время последнего свайпа — чтобы он не открыл тренировку
 function calShift(n){
   let cm=(calMonth||mKey(todayKey()))+'-01';
   calMonth=mKey(dAdd(cm,n>0?32:-1).slice(0,7)+'-01');
-  renderToday();
+  calAnim=n>0?'next':'prev'; renderToday(); calAnim='';
 }
-function calToggle(){ calOpen=!calOpen; localStorage.setItem(LS_CALOPEN,calOpen?'1':'0'); renderToday(); }
-function calPick(key,d){ fitView=+d; go('fit'); }
+function calHome(){                    // тап по названию месяца возвращает к текущему
+  let cur=mKey(todayKey()); if(calMonth===cur)return;
+  calAnim=calMonth<cur?'next':'prev'; calMonth=cur; renderToday(); calAnim='';
+}
+function calToggle(){
+  calOpen=!calOpen;
+  if(calOpen)calMonth=mKey(todayKey());   // открываем всегда на текущем месяце
+  localStorage.setItem(LS_CALOPEN,calOpen?'1':'0'); renderToday();
+}
+function calPick(key,d){ if(Date.now()-calSwipeAt<500)return; fitView=+d; go('fit'); }
 
 function calHTML(){
   let tk=todayKey();
@@ -2173,15 +2191,44 @@ function calHTML(){
   let tail=(7-(cells.match(/class="cell/g)||[]).length%7)%7;  // начало следующего месяца
   for(let i=1;i<=tail;i++)cells+='<div class="cell out"><span class="n">'+i+'</span></div>';
   return bar
-    +'<div class="cal">'
+    +'<div class="cal'+(calAnim?' '+calAnim:'')+'">'
     +'<div class="calhead"><button class="calnav" onclick="calShift(-1)">‹</button>'
-    +'<b>'+MON[fd.getMonth()]+' '+fd.getFullYear()+'</b>'
+    +'<button class="calmon" onclick="calHome()">'+MON[fd.getMonth()]+' '+fd.getFullYear()+'</button>'
     +'<button class="calnav" onclick="calShift(1)">›</button></div>'
     +'<div class="calgrid">'
     +['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС'].map(w=>'<div class="wd">'+w+'</div>').join('')
     +cells+'</div>'
-    +'<div class="calnote">зелёным — сделано, светлым — по плану; тап открывает тренировку</div></div>';
+    +'<div class="calnote">зелёным — сделано, светлым — по плану<br>'
+    +'свайп влево/вправо — месяц, тап — тренировка</div></div>';
 }
+
+/* Свайп по календарю: влево — следующий месяц, вправо — предыдущий.
+   Слушаем на #nextBanner: сам календарь перерисовывается, а контейнер живёт всегда. */
+(function(){
+  let host=document.getElementById('nextBanner'); if(!host)return;
+  let x0=0,y0=0,live=false,wheelAt=0;
+  let inCal=t=>!!(t&&t.closest&&t.closest('.cal'));
+  host.addEventListener('touchstart',e=>{
+    live=false;
+    if(!calOpen||e.touches.length!==1||!inCal(e.target))return;
+    live=true; x0=e.touches[0].clientX; y0=e.touches[0].clientY;
+  },{passive:true});
+  host.addEventListener('touchend',e=>{
+    if(!live)return; live=false;
+    let t=e.changedTouches[0], dx=t.clientX-x0, dy=t.clientY-y0;
+    if(Math.abs(dx)<42||Math.abs(dx)<Math.abs(dy)*1.4)return;   // почти вертикаль — это скролл
+    calSwipeAt=Date.now();
+    calShift(dx<0?1:-1);
+  },{passive:true});
+  host.addEventListener('touchcancel',()=>{live=false;},{passive:true});
+  host.addEventListener('wheel',e=>{                            // трекпад и мышь на компьютере
+    if(!calOpen||!inCal(e.target))return;
+    if(Math.abs(e.deltaX)<14||Math.abs(e.deltaX)<Math.abs(e.deltaY))return;
+    e.preventDefault();
+    if(Date.now()-wheelAt<380)return;                           // один месяц на жест, а не десять
+    wheelAt=Date.now(); calShift(e.deltaX>0?1:-1);
+  },{passive:false});
+})();
 
 /* ---------- НАВИГАЦИЯ ---------- */
 const TITLES={today:'Сегодня',meds:'Лекарства',fit:'Тренировки',food:'Питание',add:'Добавить',labs:'Анализы',set:'Настройки'};
@@ -2201,7 +2248,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 20:57 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 21:10 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
