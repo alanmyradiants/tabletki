@@ -1,8 +1,13 @@
-const CACHE='pills-v5';
+const CACHE='pills-v6';
 const ASSETS=['./','./index.html','./manifest.json','./icon.svg'];
 self.addEventListener('install',e=>{
   self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).catch(()=>{}));
+  // cache:'reload' — иначе в запас кладётся копия из старого кэша браузера,
+  // и при слабой сети приложение откатывается на неё.
+  e.waitUntil(caches.open(CACHE).then(c=>
+    Promise.all(ASSETS.map(u=>fetch(new Request(u,{cache:'reload'}))
+      .then(r=>r.ok?c.put(u,r):null).catch(()=>null)))
+  ).catch(()=>{}));
 });
 self.addEventListener('activate',e=>{
   e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));
@@ -15,8 +20,13 @@ self.addEventListener('fetch',e=>{
   if(isHTML){
     // network-first: страница всегда грузится свежая, если есть интернет
     e.respondWith(
-      fetch(req).then(resp=>{const cp=resp.clone();caches.open(CACHE).then(c=>c.put(req,cp)).catch(()=>{});return resp;})
-        .catch(()=>caches.match(req).then(r=>r||caches.match('./index.html')))
+      fetch(req).then(resp=>{
+        // свежую страницу кладём и под свой адрес, и под './index.html',
+        // чтобы запасная копия никогда не была старее показанной
+        const cp=resp.clone(), cp2=resp.clone();
+        caches.open(CACHE).then(c=>{c.put(req,cp);c.put('./index.html',cp2);}).catch(()=>{});
+        return resp;
+      }).catch(()=>caches.match(req).then(r=>r||caches.match('./index.html')))
     );
   } else {
     // cache-first для статических файлов
