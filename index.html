@@ -152,6 +152,8 @@
   .vtile input[type=file],.vbtn input[type=file]{display:none}
   label.vbtn{display:inline-block}
   .exvideo{width:100%;border-radius:14px;background:#000;display:block;margin:0 0 11px}
+  .vload{border-radius:14px;background:var(--card2);color:var(--muted);display:flex;align-items:center;
+    justify-content:center;font-size:15px;font-weight:700;margin:0 0 11px}
   .progress{font-size:13px;font-weight:800;padding:7px 11px;border-radius:11px;background:var(--card2);
     color:var(--text);flex:0 0 auto;font-variant-numeric:tabular-nums}
   .progress.done{background:var(--green);color:#06231b}
@@ -1660,12 +1662,27 @@ function vtileStyle(ar,tall){
     ? 'height:min('+(tall?'70vh':'44vh')+','+(tall?520:340)+'px);aspect-ratio:'+ar+';width:auto;margin-left:auto;margin-right:auto'
     : 'width:100%;aspect-ratio:'+ar;
 }
-function fitShowVideo(id){
+const videoBlobs={};   // скачанные ролики держим в памяти: второй раз открывается сразу
+
+async function fitShowVideo(id){
   let box=document.getElementById('vid-'+id); if(!box)return;
   let w=workouts.find(x=>x.id===id); if(!w||!w.video)return;
   let ar=w.ar||1.777;
+  let src=w.video;
+  if(!videoBlobs[id]){
+    box.innerHTML='<div class="vload" style="'+vtileStyle(ar,true)+'">Загружаю видео…</div>';
+    try{
+      // Плеер iPhone требует отдачи по кускам, а хранилище её не даёт —
+      // поэтому качаем ролик целиком и играем из памяти.
+      let r=await fetch(w.video,{mode:'cors'});
+      if(!r.ok) throw new Error('http '+r.status);
+      let b=await r.blob();
+      videoBlobs[id]=URL.createObjectURL(new Blob([b],{type:'video/mp4'}));
+    }catch(e){ videoBlobs[id]=''; }
+  }
+  if(videoBlobs[id])src=videoBlobs[id];
   box.innerHTML='<video class="exvideo" style="'+vtileStyle(ar,true)+'" src="'
-    +escAttr(w.video)+'" controls playsinline preload="metadata"></video>';
+    +escAttr(src)+'" controls playsinline preload="auto"></video>';
   let v=box.querySelector('video'); if(!v)return;
   v.onloadedmetadata=()=>{                       // пропорции берём у самого ролика
     if(v.videoWidth&&v.videoHeight){
@@ -1830,7 +1847,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 10:19 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 10:23 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
