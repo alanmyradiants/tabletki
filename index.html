@@ -159,6 +159,8 @@
   .exvideo{width:100%;border-radius:14px;background:#000;display:block;margin:0 0 11px}
   .vload{border-radius:14px;background:var(--card2);color:var(--muted);display:flex;align-items:center;
     justify-content:center;font-size:15px;font-weight:700;margin:0 0 11px}
+  .vfail{border-radius:14px;background:var(--card2);color:var(--muted);padding:16px 14px;margin:0 0 4px;
+    font-size:13.5px;font-weight:700;line-height:1.5;text-align:center}
   .progress{font-size:13px;font-weight:800;padding:7px 11px;border-radius:11px;background:var(--card2);
     color:var(--text);flex:0 0 auto;font-variant-numeric:tabular-nums}
   .progress.done{background:var(--green);color:#06231b}
@@ -1740,9 +1742,14 @@ async function fitShowVideo(id){
   };
   v.onerror=()=>{
     let e=v.error, c=e?e.code:0;
-    toast(c===4?'Не открылось внутри приложения — жми «Открыть отдельно»':'Видео не загрузилось (код '+c+')');
-    box.innerHTML='<a class="btn ghost" style="display:block;text-align:center;text-decoration:none" '
-      +'href="'+escAttr(w.video)+'" target="_blank" rel="noopener">▶ Открыть видео отдельно</a>';
+    delete videoBlobs[id];                       // вдруг скачалось битым — дадим перекачать
+    box.innerHTML='<div class="vfail">'
+      +(c===4?'Этот браузер не открывает формат ролика.<br>На телефоне он обычно играет.'
+             :'Видео не загрузилось (код '+c+').')
+      +'</div>'
+      +'<button class="btn ghost" onclick="fitShowVideo(\''+id+'\')">↻ Попробовать снова</button>'
+      +'<a class="btn ghost" style="display:block;text-align:center;text-decoration:none" '
+      +'href="'+escAttr(w.video)+'" target="_blank" rel="noopener">▶ Открыть отдельно</a>';
   };
   let pr=v.play(); if(pr&&pr.catch)pr.catch(()=>{});   // не вышло — откроется по кнопке
 }
@@ -1905,7 +1912,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 18:52 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 18:56 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
