@@ -129,6 +129,7 @@
   .ex.done .nm{color:var(--muted);text-decoration:line-through}
   .ex .meta{font-size:13px;color:var(--muted);margin-top:3px;line-height:1.5}
   .ex .meta b{color:var(--text);font-variant-numeric:tabular-nums}
+  .ex .meta .edit{font-size:12px;font-weight:700;color:var(--green-d);white-space:nowrap}
   .setrow{display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap}
   .setdot{width:36px;height:36px;border-radius:50%;border:2.5px solid var(--muted);background:none;
     color:var(--muted);font-size:13px;font-weight:800;font-family:inherit;cursor:pointer;
@@ -1528,6 +1529,8 @@ function muscleOf(t){
   return MUSCLES.indexOf(v)>=0 ? v.charAt(0).toUpperCase()+v.slice(1) : null;
 }
 
+function plSets(n){ let a=n%10,b=n%100;
+  return n+' подход'+((a===1&&b!==11)?'':((a>=2&&a<=4&&(b<12||b>14))?'а':'ов')); }
 function plEx(n){ let a=n%10,b=n%100;
   return n+' упражнени'+((a===1&&b!==11)?'е':((a>=2&&a<=4&&(b<12||b>14))?'я':'й')); }
 function fitEntry(id,dateKey){ return fitLog[(dateKey||todayKey())+'|'+id] || null; }
@@ -1778,9 +1781,10 @@ function renderFit(){
     let last=lastWeight(w.id);
     let kg=(e.w!=null?e.w:(w.weight!=null?w.weight:null));
     let plan=[];
-    if(w.sets)plan.push(w.sets+' подхода в отказ');
+    if(w.sets)plan.push(plSets(w.sets)+' в отказ');
     if(kg!=null)plan.push('<b>'+kg+' кг</b>');
     let meta=plan.join(' · ');
+    if(meta)meta+=' <span class="edit">изменить ✎</span>';
     let wu=warmup(kg);
     if(wu)meta+=(meta?'<br>':'')+'подводящий: '+wu+' кг × 8';
     if(last)meta+=(meta?'<br>':'')+'прошлый раз '+last.w+' кг';
@@ -1829,7 +1833,8 @@ function renderFit(){
   + (isCur
       ? '<button class="btn ghost" onclick="fitSkip()">Следующая тренировка →</button>'
       : '<button class="btn ghost" onclick="setFitCur('+fitView+')">Сделать текущей</button>')
-  + '<div class="rules">Все подходы — в отказ, с одним рабочим весом.<br>'
+  + '<div class="rules">Число подходов у каждого упражнения своё — тапни «изменить ✎» под названием.<br><br>'
+  + 'Все подходы — в отказ, с одним рабочим весом.<br>'
   + 'Перед рабочими один подводящий: 60–65 % от рабочего, 8 повторов — в счёт не идёт.<br>'
   + 'Когда рабочий вес пошёл на 10–12 повторов в первом подходе — со следующей тренировки поднимаешь вес.</div>';
 }
@@ -1878,7 +1883,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 18:39 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 18:47 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
