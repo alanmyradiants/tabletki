@@ -149,6 +149,8 @@
     padding-left:4px;box-shadow:0 2px 12px rgba(0,0,0,.35)}
   .vtile.empty{height:96px;background:var(--card2);border:1.5px dashed var(--line);color:var(--muted);
     display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;font-weight:700}
+  .vtile input[type=file],.vbtn input[type=file]{display:none}
+  label.vbtn{display:inline-block}
   .exvideo{width:100%;border-radius:14px;background:#000;display:block;margin:0 0 11px}
   .progress{font-size:13px;font-weight:800;padding:7px 11px;border-radius:11px;background:var(--card2);
     color:var(--text);flex:0 0 auto;font-variant-numeric:tabular-nums}
@@ -427,7 +429,6 @@
     <div id="fitDays" class="labcats"></div>
     <div id="fitBanner"></div>
     <div id="fitList"></div>
-    <input type="file" id="fitVideoFile" accept="video/*" style="position:absolute;left:-9999px;top:0;width:1px;height:1px;opacity:0" onchange="fitVideoPicked(this)">
   </section>
 
   <!-- FOOD -->
@@ -1578,7 +1579,7 @@ function setFitCur(d){ fitCur=+d; fitView=+d; localStorage.setItem(LS_FITCUR,Str
 function fitSkip(){ setFitCur(fitNext(fitCur)); toast('Следующая тренировка — день '+fitCur); }
 
 /* видео к упражнению: лежит в Supabase Storage, грузится только по тапу */
-function fitPickVideo(id){ fitVideoTarget=id; let f=document.getElementById('fitVideoFile'); f.value=''; f.click(); }
+// выбор файла делает сам <label> — программный click() Safari на iPhone игнорирует
 // первый кадр ролика — обложка ячейки, чтобы не грузить всё видео ради картинки
 function videoPoster(file){
   return new Promise(res=>{
@@ -1613,12 +1614,13 @@ async function storagePut(path,body,type){
   if(!r.ok) throw new Error('http '+r.status);
   return SUPA_URL+'/storage/v1/object/public/pill-fit/'+path;
 }
-async function fitVideoPicked(inp){
+async function fitVideoPicked(inp,id){
   let file=inp.files&&inp.files[0]; if(!file)return;
-  let id=fitVideoTarget; fitVideoTarget='';
-  if(!id||!workouts.some(w=>w.id===id))return;   // без выбранного упражнения не грузим
-  if(file.size>25*1024*1024){ toast('Видео больше 25 МБ — сними покороче'); return; }
-  toast('Загружаю видео…');
+  inp.value='';
+  if(!id||!workouts.some(w=>w.id===id))return;
+  let mb=Math.round(file.size/1048576);
+  if(file.size>120*1024*1024){ toast('Ролик '+mb+' МБ — это слишком много, сними покороче'); return; }
+  toast(mb>40?('Загружаю '+mb+' МБ — это займёт время…'):'Загружаю видео…');
   try{
     ensureSyncCode();
     let ext=(file.name.split('.').pop()||'mp4').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,4)||'mp4';
@@ -1631,7 +1633,7 @@ async function fitVideoPicked(inp){
     if(w){ w.video=url; w.poster=poster; w.ar=(shot&&shot.ar)?Math.round(shot.ar*1000)/1000:null;
       save(); renderFit(); }
     toast('Видео добавлено ✓');
-  }catch(e){ toast('Не получилось загрузить видео'); }
+  }catch(e){ toast('Не получилось загрузить видео ('+(e&&e.message||'ошибка')+')'); }
 }
 // вертикальный ролик держим по центру и не даём ему съесть весь экран
 function vtileStyle(ar,tall){
@@ -1727,13 +1729,14 @@ function renderFit(){
         onclick="fitShowVideo('${w.id}')" aria-label="Смотреть видео: ${escAttr(w.name)}">
         ${still}<span class="play"><i>▶</i></span></button>`;
     } else {
-      tile = `<button class="vtile empty" onclick="fitPickVideo('${w.id}')">＋ Добавить видео</button>`;
+      tile = `<label class="vtile empty">＋ Добавить видео
+        <input type="file" accept="video/*" onchange="fitVideoPicked(this,'${w.id}')"></label>`;
     }
     return `<div class="ex ${dn?'done':''}">
       <div id="vid-${w.id}">${tile}</div>
       <div class="top">
         <div class="nm" onclick="renameEx('${w.id}')">${esc(w.name)}</div>
-        ${w.video?`<button class="vbtn" onclick="fitPickVideo('${w.id}')">Заменить</button>`:''}
+        ${w.video?`<label class="vbtn">Заменить<input type="file" accept="video/*" onchange="fitVideoPicked(this,'${w.id}')"></label>`:''}
         <button class="iconbtn" onclick="moveEx('${w.id}',-1)" aria-label="Выше">↑</button>
         <button class="iconbtn" onclick="moveEx('${w.id}',1)" aria-label="Ниже">↓</button>
         <button class="iconbtn" onclick="delEx('${w.id}')">🗑</button>
@@ -1795,7 +1798,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 09:40 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 09:42 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
