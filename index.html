@@ -123,19 +123,41 @@
   .sum{margin:12px 6px 0;font-size:13px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
 
   /* ------- Тренировки ------- */
-  .ex{padding:14px 12px;border-radius:14px}
+  .ex{padding:12px 10px;border-radius:14px}
+  .exrow{display:flex;gap:12px;align-items:flex-start}
+  .vcol{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .vthumb{position:relative;width:76px;height:101px;border:none;padding:0;border-radius:12px;overflow:hidden;
+    background:#0b0e13;cursor:pointer;font-family:inherit;display:block}
+  .vthumb img,.vthumb video{width:100%;height:100%;object-fit:cover;display:block}
+  .vthumb .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  .vthumb .play i{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.93);color:#15181d;
+    font-size:12px;font-style:normal;display:flex;align-items:center;justify-content:center;padding-left:2px}
+  .vthumb.empty{background:var(--card2);border:1.5px dashed var(--line);color:var(--muted);
+    display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;line-height:1.3;text-align:center}
+  .vswap{font-size:11.5px;font-weight:700;color:var(--muted);cursor:pointer}
+  .vthumb input[type=file],.vswap input[type=file]{display:none}
+  .exbody{flex:1;min-width:0}
+  .plan{display:flex;align-items:center;gap:3px;margin-top:6px;font-size:11.5px;color:var(--muted);font-weight:700;
+    flex-wrap:nowrap;white-space:nowrap}
+  .plan input{width:40px;text-align:center;padding:5px 1px;border-radius:9px;border:1px solid var(--line);
+    background:var(--card);color:var(--text);font-size:14.5px;font-weight:800;font-family:inherit;
+    -moz-appearance:textfield;appearance:textfield}
+  .plan input::-webkit-outer-spin-button,.plan input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .plan .x{color:var(--line);font-weight:800}
+  .setdot.add{border-style:dashed;font-size:16px}
+  .grow{margin-top:6px;font-size:12.5px;font-weight:700;color:var(--green-d);line-height:1.4}
   .ex+.ex{border-top:1px solid var(--line)}
   .ex .top{display:flex;align-items:flex-start;gap:10px}
-  .ex .nm{font-size:17px;font-weight:700;flex:1;min-width:0;cursor:pointer}
+  .ex .nm{font-size:16.5px;font-weight:700;flex:1;min-width:0;cursor:pointer;line-height:1.25}
   .ex .meta{cursor:pointer}
   .ex .iconbtn{font-size:17px;padding:4px 3px}
   .banner{cursor:pointer}
   .ex.done .nm{color:var(--muted);text-decoration:line-through}
-  .ex .meta{font-size:13px;color:var(--muted);margin-top:3px;line-height:1.5}
+  .ex .meta{font-size:12.5px;color:var(--muted);margin-top:7px;line-height:1.5}
   .ex .meta b{color:var(--text);font-variant-numeric:tabular-nums}
   .ex .meta .edit{font-size:12px;font-weight:700;color:var(--green-d);white-space:nowrap}
-  .setrow{display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap}
-  .setdot{width:36px;height:36px;border-radius:50%;border:2.5px solid var(--muted);background:none;
+  .setrow{display:flex;align-items:center;gap:6px;margin-top:9px;flex-wrap:wrap}
+  .setdot{width:34px;height:34px;border-radius:50%;border:2.5px solid var(--muted);background:none;
     color:var(--muted);font-size:13px;font-weight:800;font-family:inherit;cursor:pointer;
     display:flex;align-items:center;justify-content:center;flex:0 0 auto;font-variant-numeric:tabular-nums}
   .setdot.on{background:var(--green);border-color:var(--green);color:#06231b}
@@ -1466,6 +1488,21 @@ function renameEx(id){
   v=v.trim(); if(!v)return;
   w.name=v; save(); renderFit(); renderToday();
 }
+function setPlan(id,field,v){          // подходы / повторы / вес правятся прямо в карточке
+  let w=workouts.find(x=>x.id===id); if(!w)return;
+  if(field==='sets'){ let n=parseInt(v,10); w.sets=(isFinite(n)&&n>=0&&n<=12)?n:w.sets; }
+  else if(field==='reps'){ w.reps=String(v||'').trim().slice(0,12); }
+  else if(field==='weight'){ let n=parseFloat(String(v).replace(',','.'));
+    w.weight=isFinite(n)?n:null;
+    let e=fitTouch(id); e.w=w.weight; }
+  save(); renderFit(); renderToday();
+}
+function addSet(id,delta){
+  let w=workouts.find(x=>x.id===id); if(!w)return;
+  let n=(w.sets||0)+delta;
+  if(n<1||n>12)return;
+  w.sets=n; save(); renderFit();
+}
 function setSets(id){
   let w=workouts.find(x=>x.id===id); if(!w)return;
   let v=prompt('Сколько рабочих подходов?', w.sets||3);
@@ -1802,18 +1839,18 @@ function renderFit(){
     let e=fitEntry(w.id)||{}, dn=exDone(w);
     let last=lastWeight(w.id);
     let kg=(e.w!=null?e.w:(w.weight!=null?w.weight:null));
-    let plan=[];
-    if(w.sets)plan.push(plSets(w.sets)+' в отказ');
-    if(kg!=null)plan.push('<b>'+kg+' кг</b>');
-    let meta=plan.join(' · ');
-    if(meta)meta+=' <span class="edit">изменить ✎</span>';
-    let wu=warmup(kg);
-    if(wu)meta+=(meta?'<br>':'')+'подводящий: '+wu+' кг × 8';
-    if(last)meta+=(meta?'<br>':'')+'прошлый раз '+last.w+' кг';
-    let reps=(e.s||[]).filter(x=>typeof x==='number');
-    if(reps.length)meta+=(meta?'<br>':'')+'повторы: '+reps.join(' · ');
-    if(typeof (e.s||[])[0]==='number' && e.s[0]>=10)
-      meta+=(meta?'<br>':'')+'<span style="color:var(--green-d);font-weight:700">первый подход 10+ — со следующей тренировки поднимай вес</span>';
+    // миниатюра ролика слева: тап — смотреть, подпись под ней — заменить
+    let thumb;
+    if(w.video){
+      let still = w.poster
+        ? `<img src="${escAttr(w.poster)}" alt="" loading="lazy" onerror="this.remove()">`
+        : `<video src="${escAttr(w.video)}#t=0.5" preload="metadata" muted playsinline></video>`;
+      thumb = `<button class="vthumb" onclick="fitShowVideo('${w.id}')" aria-label="Смотреть видео: ${escAttr(w.name)}">
+          ${still}<span class="play"><i>▶</i></span></button>
+        <label class="vswap">заменить<input type="file" accept="video/*" onchange="fitVideoPicked(this,'${w.id}')"></label>`;
+    } else {
+      thumb = `<label class="vthumb empty">＋<br>видео<input type="file" accept="video/*" onchange="fitVideoPicked(this,'${w.id}')"></label>`;
+    }
     let dots='';
     if(isCur){
       if(w.sets){
@@ -1822,36 +1859,45 @@ function renderFit(){
           dots+='<button class="setdot'+(on?' on':'')+'" onclick="toggleSet(\''+w.id+'\','+i+')">'
             +(typeof on==='number'?on:(on?'✓':(i+1)))+'</button>';
         }
+        dots+='<button class="setdot add" onclick="addSet(\''+w.id+'\',1)" aria-label="Добавить подход">＋</button>';
       } else {
         dots+='<button class="setdot'+(e.d?' on':'')+'" onclick="toggleEx(\''+w.id+'\')">'+(e.d?'✓':'—')+'</button>';
       }
-      dots+='<span class="wbox"><input type="number" inputmode="decimal" step="0.5" min="0" placeholder="—"'
-        +' value="'+(kg!=null?kg:'')+'" onchange="setWeight(\''+w.id+'\',this.value)"> кг</span>';
     }
-    let tile;
-    if(w.video){
-      let ar=w.ar||1.777;
-      let still = w.poster
-        ? `<img src="${escAttr(w.poster)}" alt="" loading="lazy" onerror="this.remove()">`
-        : `<video src="${escAttr(w.video)}#t=0.5" preload="metadata" muted playsinline></video>`;
-      tile = `<button class="vtile" style="${vtileStyle(ar)}"
-        onclick="fitShowVideo('${w.id}')" aria-label="Смотреть видео: ${escAttr(w.name)}">
-        ${still}<span class="play"><i>▶</i></span></button>`;
-    } else {
-      tile = `<label class="vtile empty">＋ Добавить видео
-        <input type="file" accept="video/*" onchange="fitVideoPicked(this,'${w.id}')"></label>`;
-    }
+    let hints=[];
+    let wu=warmup(kg);
+    if(wu)hints.push('подводящий: '+wu+' кг × 8');
+    if(last)hints.push('прошлый раз '+last.w+' кг');
+    let reps=(e.s||[]).filter(x=>typeof x==='number');
+    if(reps.length)hints.push('повторы: '+reps.join(' · '));
+    let grow=(typeof (e.s||[])[0]==='number' && e.s[0]>=10)
+      ? '<div class="grow">первый подход 10+ — со следующей тренировки поднимай вес</div>' : '';
     return `<div class="ex ${dn?'done':''}">
-      <div id="vid-${w.id}">${tile}</div>
-      <div class="top">
-        <div class="nm" onclick="renameEx('${w.id}')">${esc(w.name)}</div>
-        ${w.video?`<label class="vbtn">Заменить<input type="file" accept="video/*" onchange="fitVideoPicked(this,'${w.id}')"></label>`:''}
-        <button class="iconbtn" onclick="moveEx('${w.id}',-1)" aria-label="Выше">↑</button>
-        <button class="iconbtn" onclick="moveEx('${w.id}',1)" aria-label="Ниже">↓</button>
-        <button class="iconbtn" onclick="delEx('${w.id}')">🗑</button>
+      <div class="exrow">
+        <div class="vcol">${thumb}</div>
+        <div class="exbody">
+          <div class="top">
+            <div class="nm" onclick="renameEx('${w.id}')">${esc(w.name)}</div>
+            <button class="iconbtn" onclick="moveEx('${w.id}',-1)" aria-label="Выше">↑</button>
+            <button class="iconbtn" onclick="moveEx('${w.id}',1)" aria-label="Ниже">↓</button>
+            <button class="iconbtn" onclick="delEx('${w.id}')" aria-label="Удалить">🗑</button>
+          </div>
+          <div class="plan">
+            <input type="number" min="1" max="12" inputmode="numeric" value="${w.sets||''}"
+              onchange="setPlan('${w.id}','sets',this.value)" aria-label="Подходы"><span>подх</span>
+            <span class="x">×</span>
+            <input type="text" inputmode="numeric" value="${escAttr(w.reps||'')}" placeholder="—"
+              onchange="setPlan('${w.id}','reps',this.value)" aria-label="Повторы"><span>раз</span>
+            <span class="x">·</span>
+            <input type="number" min="0" step="0.5" inputmode="decimal" value="${kg!=null?kg:''}" placeholder="—"
+              onchange="setPlan('${w.id}','weight',this.value)" aria-label="Вес"><span>кг</span>
+          </div>
+          ${dots?`<div class="setrow">${dots}</div>`:''}
+          ${hints.length?`<div class="meta">${hints.join(' · ')}</div>`:''}
+          ${grow}
+        </div>
       </div>
-      ${meta?`<div class="meta" onclick="setSets('${w.id}')">${meta}</div>`:''}
-      ${dots?`<div class="setrow">${dots}</div>`:''}
+      <div id="vid-${w.id}"></div>
     </div>`;
   }).join('')+'</div>'
   + '<button class="btn green" onclick="addEx('+fitView+')">＋ Упражнение</button>'
@@ -1860,8 +1906,8 @@ function renderFit(){
   + (isCur
       ? '<button class="btn ghost" onclick="fitSkip()">Следующая тренировка →</button>'
       : '<button class="btn ghost" onclick="setFitCur('+fitView+')">Сделать текущей</button>')
-  + '<div class="rules">Число подходов своё у каждого упражнения — тапни «изменить ✎» под названием.<br>'
-  + 'Тап по кружку подхода спрашивает повторы; можно пропустить — тогда это просто отметка.<br><br>'
+  + '<div class="rules">Подходы, повторы и вес правятся прямо в карточке; ＋ добавляет лишний подход.<br>'
+  + 'Тап по кружку спрашивает, сколько повторов вышло; можно пропустить — тогда это просто отметка.<br><br>'
   + 'Все подходы — в отказ, с одним рабочим весом.<br>'
   + 'Перед рабочими один подводящий: 60–65 % от рабочего, 8 повторов — в счёт не идёт.<br>'
   + 'Когда рабочий вес пошёл на 10–12 повторов в первом подходе — со следующей тренировки поднимаешь вес.</div>';
@@ -1912,7 +1958,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 18:56 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='22.09.2026 19:25 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
