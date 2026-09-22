@@ -101,6 +101,7 @@
   .pp .pnm{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:11px;padding:11px;font-size:16px;font-weight:700;font-family:inherit}
   .pp .pr{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap;align-items:center}
   .pp .pr label{font-size:12px;color:var(--muted);font-weight:700}
+  .pp select{background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:11px;padding:9px 10px;font-size:14px;font-weight:700;font-family:inherit}
   .pp small{font-size:12px;color:var(--muted)}
   .timepills{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px;align-items:center}
   .tpill{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:6px 9px;font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums}
@@ -233,9 +234,9 @@
     </div>
 
     <div id="add-food" class="hidden">
-      <label class="fld">Вставь меню на день</label>
-      <textarea id="foodText" placeholder="Например:&#10;08:00 Завтрак — овсянка 60 г, 2 яйца, 450 ккал&#10;13:00 Обед — курица 200 г, рис, салат, 620 ккал&#10;16:30 Перекус — творог 150 г, яблоко&#10;19:30 Ужин — рыба, овощи, 480 ккал"></textarea>
-      <div class="hint">Каждый приём пищи — с новой строки: время, название, состав и калории (если знаешь). Если время не указать, оно подставится само: завтрак — 08:00, обед — 13:00, ужин — 19:00. Потом можно поправить вручную.</div>
+      <label class="fld">Вставь меню — на день или сразу на неделю</label>
+      <textarea id="foodText" placeholder="Например:&#10;СРЕДА&#10;Завтрак:&#10;Рис 80 г + яичница из 3 яиц&#10;Перекус:&#10;Фундук 40 г&#10;Обед:&#10;Тунец 180 г + пшеничная крупа 90 г&#10;Ужин:&#10;Макароны 100 г + куриное филе 200 г&#10;Ближе ко сну 2 порции протеина&#10;&#10;ЧЕТВЕРГ&#10;…" style="min-height:180px"></textarea>
+      <div class="hint">Строка с днём недели («СРЕДА», «ЧЕТВЕРГ») переключает день — так можно вставить хоть весь недельный рацион сразу. Название приёма можно писать отдельной строкой («Завтрак:»), а еду — следующей. Время подставится само: завтрак 08:00, перекус 11:00 (или 16:00, если он после обеда), обед 13:00, ужин 19:00, «ближе ко сну» 22:00. Калории пиши, если знаешь — «450 ккал». Меню на день заменяет прежнее меню этого же дня.</div>
       <button class="btn green" id="btnFoodParse">Разобрать меню →</button>
       <div class="preview hidden" id="foodPreviewWrap">
         <h3>Проверь и поправь — потом сохрани</h3>
@@ -367,6 +368,7 @@
 
   <!-- FOOD -->
   <section class="view hidden" id="v-food">
+    <div id="foodDays" class="labcats"></div>
     <div id="foodBanner"></div>
     <div id="foodList"></div>
   </section>
@@ -523,7 +525,7 @@ function nowHM(){let d=new Date();return String(d.getHours()).padStart(2,'0')+':
 function todayRows(){   // лекарства и приёмы пищи вперемешку, по времени
   let rows=dayRows().map(r=>({type:'med',tm:r.tm,key:r.key,ic:'💊',
     name:r.m.name, sub:(r.m.dose||'приём')+(r.m.note?' · '+r.m.note:'')}));
-  foodRows().forEach(r=>rows.push({type:'food',tm:r.tm,key:r.key,ic:'🥗',
+  foodRows(new Date().getDay()).forEach(r=>rows.push({type:'food',tm:r.tm,key:r.key,ic:'🥗',
     name:r.f.name, sub:(r.f.items||'')+(r.f.kcal?(r.f.items?' · ':'')+r.f.kcal+' ккал':'')}));
   rows.sort((a,b)=>a.tm.localeCompare(b.tm)||a.type.localeCompare(b.type));
   return rows;
@@ -648,8 +650,10 @@ document.getElementById('btnFoodParse').onclick=()=>{
 };
 document.getElementById('btnSaveFoodParsed').onclick=()=>{
   foodParsed.forEach(f=>{if(!f.time)f.time='12:00'; if(!f.name)f.name='Приём пищи';});
+  let days=[...new Set(foodParsed.filter(f=>f.day!==null&&f.day!==undefined).map(f=>f.day))];
+  if(days.length) meals=meals.filter(f=>!(f.day!==null&&f.day!==undefined&&days.indexOf(f.day)>=0));
   meals=meals.concat(foodParsed); foodParsed=[];
-  save(); renderFood(); renderToday();
+  save(); foodDay=new Date().getDay(); renderFood(); renderToday();
   document.getElementById('foodText').value='';
   document.getElementById('foodPreviewWrap').classList.add('hidden');
   toast('Меню сохранено ✓'); go('food');
@@ -1106,83 +1110,160 @@ function checkReminders(){
 }
 
 /* ---------- ПИТАНИЕ ---------- */
-// если время не написано — подставляем привычное для этого приёма пищи
-const MEAL_TIME={'завтрак':'08:00','второй завтрак':'11:00','обед':'13:00',
-  'полдник':'16:00','перекус':'16:00','ужин':'19:00','поздний ужин':'21:00'};
+const DOW_SHORT=['вс','пн','вт','ср','чт','пт','сб'];
+const DOW_FULL=['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
+const DOW_NUM={'понедельник':1,'вторник':2,'среда':3,'четверг':4,'пятница':5,'суббота':6,'воскресенье':0};
+const MEAL_NAMES={'завтрак':'Завтрак','второй завтрак':'Второй завтрак','обед':'Обед','ужин':'Ужин',
+  'перекус':'Перекус','полдник':'Полдник','поздний ужин':'Поздний ужин',
+  'перед сном':'Перед сном','ближе ко сну':'Перед сном','на ночь':'Перед сном'};
+let foodDay=new Date().getDay();   // какой день недели открыт на вкладке «Питание»
 
-function parseFoodLine(line){
-  let s=String(line||'').trim(); if(!s)return null;
-  let time='';
-  let mt=s.match(/(^|[\s(\[])([0-2]?\d)[:.]([0-5]\d)(?!\d)/);     // 08:00 / 8.30
-  if(mt){ time=pad2(+mt[2])+':'+mt[3]; s=(s.slice(0,mt.index)+' '+s.slice(mt.index+mt[0].length)).trim(); }
-  let kcal=null;
-  let mk=s.match(/(\d{2,5})\s*(?:ккал|kcal|калори[а-я]*)/i);
-  if(mk){ kcal=+mk[1]; s=(s.slice(0,mk.index)+' '+s.slice(mk.index+mk[0].length)).trim(); }
-  s=s.replace(/^\d+[).]\s*/,'').replace(/^[\s\-–—•*·]+/,'').replace(/[\s,;:–—-]+$/,'').trim();
-  if(!s)return null;
-  let name='', items='';
-  let known=s.match(/^(второй завтрак|поздний ужин|завтрак|обед|ужин|перекус|полдник)(?![а-яё])[\s—–:,-]*/i);
-  if(known){ name=known[1]; items=s.slice(known[0].length).trim(); }
-  else {
-    let parts=s.split(/\s+[—–]\s+|\s+-\s+|:\s+/);
-    if(parts.length>1){ name=parts[0].trim(); items=parts.slice(1).join(' — ').trim(); }
-    else { name=(s.split(/[,.]/)[0]||'').trim().slice(0,40)||'Приём пищи'; items=(s===name?'':s); }
-  }
-  name=name.charAt(0).toUpperCase()+name.slice(1);
-  if(!time) time=MEAL_TIME[name.toLowerCase()]||'12:00';
-  return {id:'f'+uid(), time:time, name:name, items:items, kcal:kcal};
+function lc(s){ return String(s||'').toLowerCase().replace(/ё/g,'е'); }
+function dayHeader(s){   // строка целиком = название дня недели
+  let t=lc(s).replace(/[\s:.,!–—-]+$/,'').trim();
+  return (t in DOW_NUM)?DOW_NUM[t]:null;
 }
-function parseFood(raw){ return String(raw||'').split(/\r?\n/).map(parseFoodLine).filter(Boolean); }
+function mealHeader(s){  // строка вида «Завтрак:» — название без содержимого
+  let t=lc(s).replace(/[\s:.,–—-]+$/,'').trim();
+  return MEAL_NAMES[t]||null;
+}
+function mealTime(name,lunchSeen){   // привычное время, если в тексте его нет
+  let n=lc(name);
+  if(n==='завтрак')return '08:00';
+  if(n==='второй завтрак')return '11:00';
+  if(n==='обед')return '13:00';
+  if(n==='перекус'||n==='полдник')return lunchSeen?'16:00':'11:00';
+  if(n==='ужин')return '19:00';
+  if(n==='поздний ужин')return '21:00';
+  if(n==='перед сном')return '22:00';
+  return '12:00';
+}
+function cleanEdges(s){ return String(s||'').replace(/^\d+[).]\s*/,'').replace(/^[\s\-–—•*·]+/,'').replace(/[\s,;:–—-]+$/,'').trim(); }
 
-function foodRows(){
-  return meals.slice()
+function parseFood(raw){
+  let out=[], day=null, pending=null, lunch=false;
+  String(raw||'').split(/\r?\n/).forEach(ln=>{
+    let s=ln.trim(); if(!s)return;
+    let d=dayHeader(s);
+    if(d!==null){ day=d; pending=null; lunch=false; return; }   // «СРЕДА»
+    let h=mealHeader(s);
+    if(h){ pending=h; return; }                                  // «Завтрак:» — еда на следующей строке
+    let o={s:cleanEdges(s), time:'', kcal:null};
+    let mt=o.s.match(/(^|[\s(\[])([0-2]?\d)[:.]([0-5]\d)(?!\d)/);            // 08:00 / 8.30
+    if(mt){ o.time=pad2(+mt[2])+':'+mt[3]; o.s=(o.s.slice(0,mt.index)+' '+o.s.slice(mt.index+mt[0].length)).trim(); }
+    let mk=o.s.match(/(\d{2,5})\s*(?:ккал|kcal|калори[а-я]*)/i);
+    if(mk){ o.kcal=+mk[1]; o.s=(o.s.slice(0,mk.index)+' '+o.s.slice(mk.index+mk[0].length)).trim(); }
+    o.s=cleanEdges(o.s); if(!o.s&&!pending)return;
+    let name='', items='';
+    if(pending){ name=pending; items=o.s; pending=null; }
+    else {
+      let bed=o.s.match(/(ближе ко сну|перед сном|на ночь)/i);               // фраза может стоять и в конце
+      let known=o.s.match(/^(второй завтрак|поздний ужин|завтрак|обед|ужин|перекус|полдник)(?![а-яё])[\s—–:,-]*/i);
+      if(known){ name=MEAL_NAMES[lc(known[1])]||known[1]; items=o.s.slice(known[0].length).trim(); }
+      else if(bed){ name='Перед сном'; items=cleanEdges(o.s.replace(bed[0],' ').replace(/\s+/g,' ')); }
+      else {
+        let parts=o.s.split(/\s+[—–]\s+|\s+-\s+|:\s+/);
+        if(parts.length>1){ name=parts[0].trim(); items=parts.slice(1).join(' — ').trim(); }
+        else { name=(o.s.split(/[,.]/)[0]||'').trim().slice(0,40)||'Приём пищи'; items=(o.s===name?'':o.s); }
+      }
+    }
+    name=name.charAt(0).toUpperCase()+name.slice(1);
+    let time=o.time||mealTime(name,lunch);
+    if(lc(name)==='обед')lunch=true;
+    out.push({id:'f'+uid(), day:day, time:time, name:name, items:items, kcal:o.kcal});
+  });
+  return out;
+}
+
+// приёмы пищи на выбранный день: без дня — значит каждый день
+function foodRows(day){
+  let d=(day===undefined||day===null)?new Date().getDay():day;
+  return meals.filter(f=>f.day===null||f.day===undefined||f.day===d)
     .sort((a,b)=>String(a.time||'').localeCompare(String(b.time||'')))
     .map(f=>({f:f, tm:f.time||'', key:todayKey()+'|'+f.id+'|'+(f.time||'')}));
 }
+function plMeals(n){ let a=n%10,b=n%100;
+  return n+' приём'+((a===1&&b!==11)?'':((a>=2&&a<=4&&(b<12||b>14))?'а':'ов')); }
 function mealSub(f){ return esc(f.items||'')+(f.kcal?(f.items?' · ':'')+f.kcal+' ккал':''); }
+
+function renderFoodDays(){
+  let c=document.getElementById('foodDays'); if(!c)return;
+  let today=new Date().getDay();
+  c.innerHTML=[1,2,3,4,5,6,0].map(d=>
+    '<button class="labcat'+(d===foodDay?' on':'')+'" onclick="selectFoodDay('+d+')">'
+    +DOW_SHORT[d]+(d===today?' •':'')+'</button>').join('');
+}
+function selectFoodDay(d){ foodDay=d; renderFood(); }
 
 function renderFood(){
   let c=document.getElementById('foodList'), bn=document.getElementById('foodBanner');
   if(!c||!bn)return;
-  let rows=foodRows();
+  renderFoodDays();
+  let today=new Date().getDay(), isToday=(foodDay===today);
+  let rows=foodRows(foodDay);
   if(!rows.length){
     bn.innerHTML='';
-    c.innerHTML='<div class="empty-state"><div class="em">🥗</div><p>Меню пока пустое.<br>Открой ⚙️ «Ещё» → «Добавить» → «Питание»<br>и вставь свой рацион.</p></div>';
+    c.innerHTML='<div class="empty-state"><div class="em">🥗</div><p>'
+      +(meals.length?('На '+lc(DOW_FULL[foodDay])+' меню нет.<br>Добавь его в ⚙️ «Ещё» → «Добавить» → «Питание».')
+                    :('Меню пока пустое.<br>Открой ⚙️ «Ещё» → «Добавить» → «Питание»<br>и вставь рацион на неделю.'))
+      +'</p></div>';
     return;
   }
   let nh=nowHM();
   let eaten=rows.filter(r=>log[r.key]).length;
   let kcalAll=rows.reduce((a,r)=>a+(+r.f.kcal||0),0);
   let kcalEat=rows.reduce((a,r)=>a+(log[r.key]?(+r.f.kcal||0):0),0);
-  let next=rows.find(r=>!log[r.key]&&r.tm>=nh)||rows.find(r=>!log[r.key]);
-  bn.innerHTML = next
-    ? `<div class="banner"><div class="lbl">Следующий приём пищи</div>
-        <div class="big">${esc(next.f.name)} — ${next.tm}</div>
-        <div class="sub">${mealSub(next.f)}</div></div>`
-    : `<div class="banner empty"><div class="lbl">Готово</div>
-        <div class="big" style="color:var(--green)">Меню на сегодня выполнено ✓</div>
-        <div class="sub">${eaten} из ${rows.length}${kcalAll?' · '+kcalEat+' ккал':''}</div></div>`;
+  let next=isToday?(rows.find(r=>!log[r.key]&&r.tm>=nh)||rows.find(r=>!log[r.key])):null;
+  if(!isToday){
+    bn.innerHTML=`<div class="banner empty"><div class="lbl">Меню</div>
+      <div class="big" style="color:var(--text)">${DOW_FULL[foodDay]}</div>
+      <div class="sub">${plMeals(rows.length)} пищи${kcalAll?' · '+kcalAll+' ккал':''}</div></div>`;
+  } else if(next){
+    bn.innerHTML=`<div class="banner"><div class="lbl">Следующий приём пищи</div>
+      <div class="big">${esc(next.f.name)} — ${next.tm}</div>
+      <div class="sub">${mealSub(next.f)}</div></div>`;
+  } else {
+    bn.innerHTML=`<div class="banner empty"><div class="lbl">Готово</div>
+      <div class="big" style="color:var(--green)">Меню на сегодня выполнено ✓</div>
+      <div class="sub">${eaten} из ${rows.length}${kcalAll?' · '+kcalEat+' ккал':''}</div></div>`;
+  }
   c.innerHTML='<div class="card">'+rows.map(r=>{
-    let dn=!!log[r.key];
-    let cls=''; if(r.tm<nh && !dn)cls='past';
-    let diff=hmDiff(r.tm||'00:00',nh); if(!dn && diff>=0 && diff<=60)cls='soon';
-    return `<div class="row ${dn?'done':''}">
-      <div class="check ${dn?'done':''}" onclick="toggle('${r.key}')">${dn?'✓':''}</div>
+    let dn=isToday&&!!log[r.key];
+    let cls=''; if(isToday){ if(r.tm<nh && !dn)cls='past';
+      let diff=hmDiff(r.tm||'00:00',nh); if(!dn && diff>=0 && diff<=60)cls='soon'; }
+    let check=isToday
+      ? `<div class="check ${dn?'done':''}" onclick="toggle('${r.key}')">${dn?'✓':''}</div>`
+      : '';
+    return `<div class="row ${dn?'done':''}">${check}
       <div class="info"><div class="nm">${esc(r.f.name)}</div>
         <div class="ds">${mealSub(r.f)}</div></div>
       <div class="time ${cls}">${r.tm}</div>
       <button class="iconbtn" onclick="delMeal('${r.f.id}')">🗑</button>
     </div>`;
   }).join('')+'</div>'
-  +'<div class="sum">'+(kcalAll?('Съедено '+kcalEat+' из '+kcalAll+' ккал · '):'')+eaten+' из '+rows.length+' приёмов</div>';
+  +'<div class="sum">'+(isToday
+      ? (kcalAll?('Съедено '+kcalEat+' из '+kcalAll+' ккал · '):'')+eaten+' из '+rows.length+' приёмов'
+      : (kcalAll?('Всего '+kcalAll+' ккал · '):'')+plMeals(rows.length)+' пищи')
+  +'</div>';
 }
 function delMeal(id){ meals=meals.filter(f=>f.id!==id); save(); renderFood(); renderToday(); toast('Удалено'); }
 
 function renderFoodParsed(){
-  let c=document.getElementById('foodParsedList');
-  c.innerHTML=foodParsed.map((f,i)=>`
+  let c=document.getElementById('foodParsedList'), lastDay='init';
+  c.innerHTML=foodParsed.map((f,i)=>{
+    let head='';
+    let dkey=(f.day===null||f.day===undefined)?'all':f.day;
+    if(dkey!==lastDay){ lastDay=dkey;
+      head='<div class="lab-divider">'+(dkey==='all'?'Каждый день':DOW_FULL[f.day])+'</div>'; }
+    let opts=['<option value=""'+((f.day===null||f.day===undefined)?' selected':'')+'>каждый день</option>']
+      .concat([1,2,3,4,5,6,0].map(d=>'<option value="'+d+'"'+(f.day===d?' selected':'')+'>'+DOW_FULL[d]+'</option>')).join('');
+    return head+`
     <div class="pp">
       <input class="pnm" value="${escAttr(f.name)}" oninput="foodParsed[${i}].name=this.value">
+      <div class="pr">
+        <label>день:</label>
+        <select onchange="foodParsed[${i}].day=this.value===''?null:+this.value;renderFoodParsed()">${opts}</select>
+      </div>
       <div class="pr">
         <label>время:</label>
         <input type="time" style="width:120px" value="${escAttr(f.time)}" onchange="foodParsed[${i}].time=this.value">
@@ -1193,7 +1274,8 @@ function renderFoodParsed(){
         <input type="text" style="flex:1;min-width:140px" value="${escAttr(f.items)}" placeholder="что едим" oninput="foodParsed[${i}].items=this.value">
       </div>
       <button class="pdel" onclick="foodParsed.splice(${i},1);renderFoodParsed()">Убрать этот приём</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 /* ---------- ТРЕНИРОВКИ (заготовка) ----------
