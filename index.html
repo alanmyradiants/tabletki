@@ -1498,9 +1498,9 @@ function fitDateEnsure(){                      // пропустил дни — 
   return fitDate;
 }
 function fitDateFor(d){                        // дата тренировки для дня цикла
-  let all=fitDays(); if(!all.length)return fitDateEnsure();
-  let i=all.indexOf(+d), c=all.indexOf(+fitCur);
-  if(i<0||c<0)return fitDateEnsure();
+  let all=fitCycle(); if(!all.length)return fitDateEnsure();
+  let i=all.indexOf(+d); if(i<0)return '';     // пустой день в расписание не встаёт
+  let c=all.indexOf(+fitCur); if(c<0)return fitDateEnsure();
   let off=(i-c+all.length)%all.length;
   return dAdd(fitDateEnsure(), off*fitStep);
 }
@@ -1516,10 +1516,13 @@ function fitMigrate(){   // записи старого формата (по д�
   workouts.forEach(w=>{ if(w.d==null){ w.d=(w.day==null?1:(w.day===0?7:w.day)); ch=true; } });
   return ch;
 }
-function fitDays(){
+function fitDays(){              // все дни — и пустые, только что созданные
   let set=new Set(workouts.map(w=>+w.d||1));
   Object.keys(fitGroups).forEach(k=>{ if(+k)set.add(+k); });
   return [...set].sort((a,b)=>a-b);
+}
+function fitCycle(){             // чередование: день без упражнений — не тренировка
+  return [...new Set(workouts.map(w=>+w.d||1))].sort((a,b)=>a-b);
 }
 function fitRows(d){ return workouts.filter(w=>(+w.d||1)===(+d||1)); }
 function fitGroup(d){
@@ -1537,11 +1540,24 @@ function setFitGroup(d){
 function addFitDay(){
   let days=fitDays(), n=(days.length?Math.max.apply(null,days):0)+1;
   if(n>12){ toast('Больше 12 тренировок в цикле не надо'); return; }
-  let v=prompt('Что тренируем в день '+n+'? (например «ноги»)','');
+  let v=prompt('Что тренируем в день '+n+'?\nЭто новая тренировка в цикле, а не пометка на дату.','');
   if(v===null)return;
-  v=v.trim(); fitGroups[n]=v?v.charAt(0).toUpperCase()+v.slice(1):'';
+  v=v.trim();
+  let lv=lc(v), same=lv?days.find(d=>{ let g=lc(fitGroup(d)); return g&&(g===lv||g.indexOf(lv+' ')===0||lv.indexOf(g+' ')===0); }):0;
+  if(same&&!confirm('День '+same+' уже называется «'+fitGroup(same)+'».\nВсё равно добавить ещё одну тренировку в цикл?'))return;
+  fitGroups[n]=v?v.charAt(0).toUpperCase()+v.slice(1):'';
   fitView=n; save(); renderFit();
   toast('День '+n+' создан — добавь упражнения');
+}
+function delFitDay(d){
+  d=+d;
+  if(fitRows(d).length){ toast('Сначала удали упражнения этого дня'); return; }
+  if(!confirm('Убрать день '+d+' из цикла?'))return;
+  delete fitGroups[d];
+  let cyc=fitCycle();
+  if(cyc.length&&cyc.indexOf(fitCur)<0){ fitCur=cyc[0]; localStorage.setItem(LS_FITCUR,String(fitCur)); }
+  fitView=fitCur; save(); renderFit(); renderToday();
+  toast('День '+d+' убран из цикла');
 }
 function addEx(d){
   let name=prompt('Название упражнения','');
@@ -1591,7 +1607,7 @@ function moveEx(id,dir){        // порядок упражнений внут�
   workouts[a]=same[j]; workouts[b]=same[i];
   save(); renderFit();
 }
-function fitNext(d){ let all=fitDays(); if(!all.length)return 1;
+function fitNext(d){ let all=fitCycle(); if(!all.length)return 1;
   let i=all.indexOf(+d); return all[(i<0?0:i+1)%all.length]; }
 function groupLabel(rest){
   let parts=lc(rest).split(/[\s,+/]+/).filter(Boolean).filter(x=>x!=='и'&&x!=='день');
@@ -1926,9 +1942,10 @@ function renderFitDays(){
   let tk=todayKey();
   let ci=days.indexOf(+fitCur);
   let ordered=(ci<0)?days:days.slice(ci).concat(days.slice(0,ci));   // ближайшая тренировка первой
+  ordered=ordered.filter(d=>fitDateFor(d)).concat(ordered.filter(d=>!fitDateFor(d)));  // пустые — в хвост
   c.innerHTML=ordered.map(d=>{
     let dt=fitDateFor(d);
-    let lbl=(dt===tk)?'сегодня':dShort(dt);
+    let lbl=dt?((dt===tk)?'сегодня':dShort(dt)):('день '+d+' · пусто');
     return '<button class="labcat'+(d===fitView?' on':'')+'" onclick="selectFitDay('+d+')">'
       +lbl+'</button>';
   }).join('')+'<button class="labcat" onclick="addFitDay()">＋ день</button>';
@@ -1939,8 +1956,8 @@ function renderFit(){
   let c=document.getElementById('fitList'), bn=document.getElementById('fitBanner');
   if(!c||!bn)return;
   if(fitMigrate())save();
-  let days=fitDays();
-  if(days.indexOf(fitCur)<0)fitCur=days[0]||1;
+  let days=fitDays(), cyc=fitCycle();
+  if(cyc.length&&cyc.indexOf(fitCur)<0){ fitCur=cyc[0]; localStorage.setItem(LS_FITCUR,String(fitCur)); }
   if(days.indexOf(fitView)<0)fitView=fitCur;
   renderFitDays();
   let isCur=(fitView===fitCur);
@@ -1954,7 +1971,7 @@ function renderFit(){
     bn.innerHTML = days.length
       ? `<div class="banner empty"><div class="lbl">День ${fitView}</div>
           <div class="big" style="color:var(--text)">${esc(g||'Пока пусто')}</div>
-          <div class="sub">Добавь упражнения — по одному, с видео</div></div>`
+          <div class="sub">Пока упражнений нет, этот день не попадёт в расписание</div></div>`
       : '';
     c.innerHTML='<div class="empty-state" style="padding:30px 20px"><div class="em">🏋️</div><p>'
       +(days.length?'В этом дне ещё нет упражнений.':'Плана пока нет.<br>Добавляй упражнения по одному —<br>к каждому сразу цепляется видео.')
@@ -1963,6 +1980,7 @@ function renderFit(){
       +'<label class="btn ghost" style="display:block;text-align:center">＋ Несколько видео сразу'
       +'<input type="file" accept="video/*" multiple style="display:none" onchange="fitBulkPicked(this,'+fitView+')"></label>'
       +(days.length?'<button class="btn ghost" onclick="setFitGroup('+fitView+')">Что тренируем в этот день</button>':'')
+      +(days.length>1?'<button class="btn ghost" onclick="delFitDay('+fitView+')">Убрать день '+fitView+' из цикла</button>':'')
       +'<div class="hint" style="text-align:center">Можно и целиком текстом: ⚙️ «Ещё» → «Добавить» → «Тренировки».</div>';
     return;
   }
@@ -2118,7 +2136,7 @@ function fitDoneDays(){                // когда тренировки реа
   return out;
 }
 function fitSchedule(fromKey,toKey){   // план: какая тренировка на какую дату
-  let out={}, all=fitDays();
+  let out={}, all=fitCycle();
   if(!all.length)return out;
   let base=fitDateEnsure(), i=all.indexOf(+fitCur); if(i<0)i=0;
   let d=base, j=i;
@@ -2248,7 +2266,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='22.09.2026 21:10 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='23.09.2026 06:39 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
