@@ -228,6 +228,7 @@
     line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
     background:#e7f7f0;color:var(--green-d)}
   .cell.done .g{background:var(--green);color:#06231b}
+  .cell.miss .g{background:var(--card2);color:var(--muted);text-decoration:line-through}
   .cell.has{cursor:pointer}
   .calnote{margin-top:10px;font-size:11.5px;color:var(--muted);line-height:1.4;text-align:center}
 
@@ -557,7 +558,7 @@ let labCat='Все';   // выбранная группа анализов на 
 const VAPID_PUBLIC='BOmcmS3mCnjYqlLy9NNxeQ5nbzz9naDtJ-is2oGc2Uy1DuocvYnvsMxLXlLPj0ibvtsHIRiHGcSGYoJ0zL-5tTY';
 
 function load(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
-function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));localStorage.setItem(LS_FOOD,JSON.stringify(meals));localStorage.setItem(LS_FIT,JSON.stringify(workouts));localStorage.setItem(LS_FITLOG,JSON.stringify(fitLog));localStorage.setItem(LS_FITG,JSON.stringify(fitGroups));localStorage.setItem(LS_FITDATE,fitDate);localStorage.setItem(LS_FITSTEP,String(fitStep));localStorage.setItem(LS_FITUP,String(fitUp));stateT=Date.now();localStorage.setItem(LS_T,String(stateT));schedulePush();}
+function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));localStorage.setItem(LS_FOOD,JSON.stringify(meals));localStorage.setItem(LS_FIT,JSON.stringify(workouts));localStorage.setItem(LS_FITLOG,JSON.stringify(fitLog));localStorage.setItem(LS_FITG,JSON.stringify(fitGroups));localStorage.setItem(LS_FITDATE,fitDate);localStorage.setItem(LS_FITMISS,fitMiss);localStorage.setItem(LS_FITSTEP,String(fitStep));localStorage.setItem(LS_FITUP,String(fitUp));stateT=Date.now();localStorage.setItem(LS_T,String(stateT));schedulePush();}
 function uid(){return Math.random().toString(36).slice(2,9)}
 function todayKey(d=new Date()){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
@@ -679,7 +680,8 @@ function todayRows(){   // лекарства и приёмы пищи впер�
     let done=fit.filter(w=>exDone(w)).length;
     rows.push({type:'fit',tm:fit[0].time||'18:00',key:'',ic:'🏋️',
       name:'Тренировка'+(fitGroup(fitCur)?' — '+lc(fitGroup(fitCur)):''),
-      sub:plEx(fit.length)+(done?' · сделано '+done:''), done:done, total:fit.length});
+      sub:plEx(fit.length)+(done?' · сделано '+done:'')+(fitMiss?' · перенесено с '+dShort(fitMiss):''),
+      done:done, total:fit.length});
   }
   rows.sort((a,b)=>a.tm.localeCompare(b.tm)||a.type.localeCompare(b.type));
   return rows;
@@ -843,7 +845,7 @@ document.getElementById('btnCancelFitParsed').onclick=()=>{
 function resetToday(){ let tk=todayKey(); Object.keys(log).forEach(k=>{if(k.startsWith(tk+'|'))delete log[k]}); save(); renderToday(); toast('Отметки сброшены'); }
 function wipeAll(){ if(confirm('Удалить все лекарства и отметки?')){meds=[];log={};save();renderMeds();renderToday();renderFood();toast('Очищено')} }
 function wipeFood(){ if(confirm('Удалить все приёмы пищи?')){meals=[];save();renderFood();renderToday();toast('Меню очищено')} }
-function wipeFit(){ if(confirm('Удалить план тренировок и отметки подходов?')){workouts=[];fitLog={};fitGroups={};fitCur=1;fitDate='';localStorage.setItem(LS_FITCUR,'1');localStorage.removeItem(LS_FITDATE);save();renderFit();renderToday();toast('План очищен')} }
+function wipeFit(){ if(confirm('Удалить план тренировок и отметки подходов?')){workouts=[];fitLog={};fitGroups={};fitCur=1;fitDate='';fitMissClear();localStorage.setItem(LS_FITCUR,'1');localStorage.removeItem(LS_FITDATE);save();renderFit();renderToday();toast('План очищен')} }
 
 /* ---------- СИНХРОНИЗАЦИЯ УСТРОЙСТВ ---------- */
 function setSync(s){let e=document.getElementById('syncState'); if(e){e.textContent=s; e.className='pill-state'+(s==='✓'?' on':'');}}
@@ -857,7 +859,7 @@ async function rpc(fn,body){
 function schedulePush(){ if(!syncCode)return; clearTimeout(pushTimer); pushTimer=setTimeout(cloudPush,1200); }
 async function cloudPush(){
   if(!syncCode)return;
-  try{ setSync('…'); await rpc('pill_save',{p_code:syncCode,p_data:{meds,meals,workouts,log,fitLog,fitCur,fitGroups,fitDate,fitStep,fitUp,_t:stateT}}); setSync('✓'); }
+  try{ setSync('…'); await rpc('pill_save',{p_code:syncCode,p_data:{meds,meals,workouts,log,fitLog,fitCur,fitGroups,fitDate,fitMiss,fitStep,fitUp,_t:stateT}}); setSync('✓'); }
   catch(e){ setSync('!'); }
 }
 async function cloudPull(silent){
@@ -875,6 +877,7 @@ async function cloudPull(silent){
         if(+d.fitCur)fitCur=+d.fitCur;
         if(d.fitGroups&&typeof d.fitGroups==='object')fitGroups=d.fitGroups;
         if(typeof d.fitDate==='string')fitDate=d.fitDate;
+        fitMiss=(typeof d.fitMiss==='string')?d.fitMiss:'';
         if(+d.fitStep)fitStep=+d.fitStep;
         if(+d.fitUp)fitUp=+d.fitUp;
         if(d.log&&typeof d.log==='object')log=d.log;
@@ -886,12 +889,15 @@ async function cloudPull(silent){
         localStorage.setItem(LS_FITCUR,String(fitCur));
         localStorage.setItem(LS_FITG,JSON.stringify(fitGroups));
         localStorage.setItem(LS_FITDATE,fitDate);
+        localStorage.setItem(LS_FITMISS,fitMiss);
         localStorage.setItem(LS_FITSTEP,String(fitStep));
         localStorage.setItem(LS_FITUP,String(fitUp));
         localStorage.setItem(LS_LOG,JSON.stringify(log));
         localStorage.setItem(LS_T,String(stateT));
+        fitDatePending=false;      // пришло свежее состояние — наш локальный сдвиг пересчитается сам
         renderToday(); renderMeds(); renderFood(); renderFit();
       } else if(stateT>ct){ cloudPush(); }
+      else if(fitDatePending){ fitDatePending=false; save(); }   // сдвиг даты — единственное новое
     } else if(meds.length||meals.length||workouts.length){ cloudPush(); }
     setSync('✓');
   }catch(e){ setSync('!'); }
@@ -1478,6 +1484,7 @@ const MUSCLES=['грудь','спина','ноги','бицепс','трицеп
   'икры','предплечья','всё тело','все тело','верх','низ'];
 const LS_FITCUR='pills.fitcur', LS_FITG='pills.fitgroups.v1';
 const LS_FITDATE='pills.fitdate', LS_FITSTEP='pills.fitstep';
+const LS_FITMISS='pills.fitmiss';   // с какого числа переехала текущая тренировка
 let fitDate=localStorage.getItem(LS_FITDATE)||'';   // когда следующая тренировка
 let fitStep=+localStorage.getItem(LS_FITSTEP)||1;   // через сколько дней следующая
 let fitGroups=load(LS_FITG,{});   // {номер дня: «Грудь + бицепс»}
@@ -1492,10 +1499,27 @@ function dAdd(key,days){                       // «2026-09-24» + n дней
 }
 function dShort(key){ let m=String(key||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return m?(m[3]+'.'+m[2]):''; }
-function fitDateEnsure(){                      // пропустил дни — план не уезжает в прошлое
+let fitMiss=localStorage.getItem(LS_FITMISS)||'';   // откуда перенесли, '' — ничего не переносили
+function fitMissSet(d){ if(d&&(!fitMiss||d<fitMiss))fitMiss=d; localStorage.setItem(LS_FITMISS,fitMiss); }
+function fitMissClear(){ fitMiss=''; localStorage.setItem(LS_FITMISS,''); }
+let fitDatePending=false;        // дату сдвинули локально — отправим в облако после первой сверки
+function fitDateEnsure(){        // не потренировался — тренировка переезжает вперёд, а не теряется
   let tk=todayKey();
-  if(!fitDate||fitDate<tk){ fitDate=tk; localStorage.setItem(LS_FITDATE,fitDate); }
+  if(!fitDate||fitDate<tk){
+    fitMissSet(fitDate);         // запоминаем исходное число, чтобы было видно перенос
+    fitDate=tk; localStorage.setItem(LS_FITDATE,fitDate);
+    fitDatePending=true;         // save() здесь нельзя: первый рендер идёт до сверки с облаком
+  }
+  if(fitMiss&&fitMiss>=fitDate)fitMissClear();
   return fitDate;
+}
+function fitPostpone(){          // «сегодня не буду» — та же тренировка, просто позже
+  let cur=fitDateEnsure();
+  fitMissSet(cur);
+  fitDate=dAdd(cur,1);
+  localStorage.setItem(LS_FITDATE,fitDate);
+  save(); renderFit(); renderToday();
+  toast('Перенесено на '+dShort(fitDate)+(fitGroup(fitCur)?' — '+lc(fitGroup(fitCur)):''));
 }
 function fitDateFor(d){                        // дата тренировки для дня цикла
   let all=fitCycle(); if(!all.length)return fitDateEnsure();
@@ -1721,6 +1745,7 @@ function fitCheckDone(){   // все упражнения отмечены — �
   if(nx===fitCur)return;
   fitCur=nx; localStorage.setItem(LS_FITCUR,String(fitCur));
   fitDate=dAdd(todayKey(),fitStep); localStorage.setItem(LS_FITDATE,fitDate);
+  fitMissClear();
   save(); renderFit();
   toast('Тренировка закрыта ✓ Следующая '+dShort(fitDate)+(fitGroup(nx)?' — '+lc(fitGroup(nx)):''));
 }
@@ -1732,6 +1757,7 @@ function fitUseDay(id){        // отметка в чужом дне не дв�
   if(!confirm('Сегодня тренируешь этот день'+(g?' ('+lc(g)+')':'')+'?\nРасписание сдвинется на него.'))return;
   fitCur=d; localStorage.setItem(LS_FITCUR,String(fitCur));
   fitDate=todayKey(); localStorage.setItem(LS_FITDATE,fitDate);
+  fitMissClear();
 }
 function acceptSuggest(id){          // первый тап по подходу подтверждает предложенный вес
   let w=workouts.find(x=>x.id===id); if(!w)return;
@@ -1779,7 +1805,8 @@ function setWeight(id,v){
 }
 function delEx(id){ workouts=workouts.filter(w=>w.id!==id); save(); renderFit(); renderToday(); toast('Удалено'); }
 function setFitCur(d){ fitCur=+d; fitView=+d; localStorage.setItem(LS_FITCUR,String(fitCur)); save(); renderFit(); renderToday(); }
-function fitSkip(){ setFitCur(fitNext(fitCur)); toast('Следующая тренировка — день '+fitCur); }
+function fitSkip(){ fitMissClear(); setFitCur(fitNext(fitCur));
+  toast('Пропущено · следующая'+(fitGroup(fitCur)?' — '+lc(fitGroup(fitCur)):'')); }
 
 /* видео к упражнению: лежит в Supabase Storage, грузится только по тапу */
 // выбор файла делает сам <label> — программный click() Safari на iPhone игнорирует
@@ -2073,15 +2100,20 @@ function renderFit(){
   + '<label class="btn ghost" style="display:block;text-align:center">＋ Несколько видео сразу'
   + '<input type="file" accept="video/*" multiple style="display:none" onchange="fitBulkPicked(this,'+fitView+')"></label>'
   + (isCur
-      ? '<button class="btn ghost" onclick="fitSkip()">Пропустить — перейти к следующей →</button>'
+      ? '<button class="btn ghost" onclick="fitPostpone()">Не сегодня — перенести на '
+          +dShort(dAdd(fitDateEnsure(),1))+'</button>'
+        +'<button class="btn ghost" onclick="fitSkip()">Пропустить совсем — дальше '
+          +esc(lc(fitGroup(fitNext(fitCur)))||'следующая')+' →</button>'
       : '<button class="btn ghost" onclick="setFitCur('+fitView+')">Тренирую это сегодня</button>')
+  + (isCur&&fitMiss?'<div class="sum">Перенесено с '+dShort(fitMiss)+' — тренировка не потерялась</div>':'')
   + '<div class="sum" onclick="setFitStep()">'
-    + (fitDateEnsure()===todayKey()?'Сегодня ':'Следующая '+dShort(fitDate)+' · ')
+    + (fitDateEnsure()===todayKey()?'Сегодня · ':'Следующая '+dShort(fitDate)+' · ')
     + (fitStep===1?'каждый день':(fitStep===2?'через день':'через '+(fitStep-1)+' дня'))
     + ' <span class="edit">изменить ✎</span></div>'
   + '<div class="rules">Вес зелёным — подсказка приложения по прошлой тренировке, а не твоя цифра.<br>'
   + 'Отметил подход — подсказка принимается; хочешь другой вес, впиши поверх.<br>'
   + 'Дни идут по датам: закрыл тренировку — следующая встаёт на нужное число сама.<br>'
+  + 'Не потренировался — тренировка переезжает на ближайший день сама, вместе со всеми следующими.<br>'
   + 'Галочка справа от названия отмечает всё упражнение разом; кружки — по подходам.<br>'
   + 'Подходы, повторы и вес правятся прямо в карточке; ＋ и − меняют число подходов.<br>'
   + 'Тап по кружку спрашивает, сколько повторов вышло; можно пропустить — тогда это просто отметка.<br><br>'
@@ -2199,8 +2231,9 @@ function calHTML(){
   for(let n=1;n<=days;n++){
     let key=calMonth+'-'+pad2(n);
     let dd=done[key], pd=(!dd&&key>=tk)?plan[key]:null;
-    let day=dd||pd||null;
-    let cls='cell'+(dd?' done':'')+(day?' has':'')+(key===tk?' today':'');
+    let ms=(!dd&&!pd&&fitMiss&&key===fitMiss)?fitCur:null;   // отсюда тренировку перенесли
+    let day=dd||pd||ms||null;
+    let cls='cell'+(dd?' done':'')+(ms?' miss':'')+(day?' has':'')+(key===tk?' today':'');
     let inner='<span class="n">'+n+'</span>'+(day?'<span class="g">'+esc(gShort(day))+'</span>':'');
     cells+= day
       ? '<button class="'+cls+'" onclick="calPick(\''+key+'\','+day+')">'+inner+'</button>'
@@ -2266,7 +2299,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='23.09.2026 06:39 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='24.09.2026 17:33 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
