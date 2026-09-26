@@ -308,6 +308,20 @@
   .labcats::-webkit-scrollbar{display:none}
   .labcat{flex:0 0 auto;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:20px;padding:8px 14px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
   .labcat.on{background:var(--green);border-color:var(--green);color:#06231b}
+
+  .tip{border-bottom:1px solid var(--line)}
+  .tip:last-child{border-bottom:none}
+  .tiphead{display:flex;align-items:flex-start;gap:10px;width:100%;padding:14px;
+    background:none;border:none;text-align:left;font-family:inherit;color:var(--text);cursor:pointer}
+  .tiphead .tt{flex:1;min-width:0;font-size:15px;font-weight:700;line-height:1.35}
+  .tiphead .tg{flex:0 0 auto;font-size:11px;font-weight:700;border-radius:20px;padding:4px 9px;
+    background:var(--card2);color:var(--muted);white-space:nowrap}
+  .tiphead .ch{flex:0 0 auto;color:var(--muted);font-size:13px;line-height:1.5}
+  .tipbody{padding:0 14px 14px;font-size:14.5px;line-height:1.55;
+    white-space:pre-wrap;overflow-wrap:anywhere}
+  .tipmeta{margin-top:12px;font-size:12px;color:var(--muted)}
+  .tipacts{display:flex;gap:8px;margin-top:10px}
+  .tipacts .btn{width:auto;margin:0;flex:1}
 </style>
 </head>
 <body>
@@ -395,6 +409,33 @@
   </section>
 
   <!-- SETTINGS -->
+  <section class="view hidden" id="v-tips">
+    <button class="backlink" onclick="go('set')">← Ещё</button>
+    <input type="text" id="tipSearch" placeholder="Поиск по лайфхакам"
+      autocapitalize="off" autocorrect="off" spellcheck="false" oninput="renderTips()">
+    <div id="tipCats" class="labcats"></div>
+    <div id="tipList"></div>
+    <button class="btn green" id="tipAddBtn" onclick="tipNew()">＋ Новый лайфхак</button>
+    <div id="tipForm" class="hidden">
+      <label class="fld">Текст</label>
+      <textarea id="tipText" style="min-height:190px"
+        placeholder="Вставь как есть. Первая строка станет заголовком, остальное — текстом."></textarea>
+      <div style="display:flex;gap:10px">
+        <div style="flex:1;min-width:0">
+          <label class="fld">Раздел</label>
+          <input type="text" id="tipTag" placeholder="Детокс">
+        </div>
+        <div style="flex:1;min-width:0">
+          <label class="fld">Откуда</label>
+          <input type="text" id="tipSrc" placeholder="Instagram, тренер">
+        </div>
+      </div>
+      <div class="hint">Раздел нужен, чтобы потом отфильтровать. «Откуда» — чтобы через полгода помнить, чей это совет.</div>
+      <button class="btn green" onclick="tipSave()">Сохранить</button>
+      <button class="btn ghost" onclick="tipCancel()">Отмена</button>
+    </div>
+  </section>
+
   <section class="view hidden" id="v-set">
     <div class="card" style="margin-top:8px">
       <div class="settings-row tap" onclick="go('add')">
@@ -408,6 +449,13 @@
         <div>
           <div class="t">📈 Анализы</div>
           <div class="s">Графики показателей и вся история по датам.</div>
+        </div>
+        <span class="chev">›</span>
+      </div>
+      <div class="settings-row tap" onclick="go('tips')">
+        <div>
+          <div class="t">💡 Лайфхаки</div>
+          <div class="s">Протоколы, советы и находки — всё, что хочется сохранить и не потерять.</div>
         </div>
         <span class="chev">›</span>
       </div>
@@ -551,14 +599,16 @@ let workouts=load(LS_FIT,[]);   // [{id,day,group,name,sets,reps,weight,time,vid
 let fitLog=load(LS_FITLOG,{});  // {'YYYY-MM-DD|wid':{s:[0,1,..],w:60}}
 let fitParsed=[], fitVideoTarget='';
 const LS_FOOD='pills.food.v1';
+const LS_TIPS='pills.tips.v1';   // сохранённые лайфхаки: протоколы, советы, находки
 let meals=load(LS_FOOD,[]);     // [{id,time,name,items,kcal}] — приёмы пищи на день
+let tips=load(LS_TIPS,[]);      // [{id,title,body,tag,src,d}] — сохранённые лайфхаки
 let foodParsed=[];
 let labCat='Все';   // выбранная группа анализов на вкладке «Анализы»
 // Публичный VAPID-ключ для Web Push (приватный — только на сервере)
 const VAPID_PUBLIC='BOmcmS3mCnjYqlLy9NNxeQ5nbzz9naDtJ-is2oGc2Uy1DuocvYnvsMxLXlLPj0ibvtsHIRiHGcSGYoJ0zL-5tTY';
 
 function load(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
-function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));localStorage.setItem(LS_FOOD,JSON.stringify(meals));localStorage.setItem(LS_FIT,JSON.stringify(workouts));localStorage.setItem(LS_FITLOG,JSON.stringify(fitLog));localStorage.setItem(LS_FITG,JSON.stringify(fitGroups));localStorage.setItem(LS_FITDATE,fitDate);localStorage.setItem(LS_FITMISS,fitMiss);localStorage.setItem(LS_FITSTEP,String(fitStep));localStorage.setItem(LS_FITUP,String(fitUp));stateT=Date.now();localStorage.setItem(LS_T,String(stateT));schedulePush();}
+function save(){localStorage.setItem(LS_MEDS,JSON.stringify(meds));localStorage.setItem(LS_LOG,JSON.stringify(log));localStorage.setItem(LS_FOOD,JSON.stringify(meals));localStorage.setItem(LS_TIPS,JSON.stringify(tips));localStorage.setItem(LS_FIT,JSON.stringify(workouts));localStorage.setItem(LS_FITLOG,JSON.stringify(fitLog));localStorage.setItem(LS_FITG,JSON.stringify(fitGroups));localStorage.setItem(LS_FITDATE,fitDate);localStorage.setItem(LS_FITMISS,fitMiss);localStorage.setItem(LS_FITSTEP,String(fitStep));localStorage.setItem(LS_FITUP,String(fitUp));stateT=Date.now();localStorage.setItem(LS_T,String(stateT));schedulePush();}
 function uid(){return Math.random().toString(36).slice(2,9)}
 function todayKey(d=new Date()){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
@@ -859,7 +909,7 @@ async function rpc(fn,body){
 function schedulePush(){ if(!syncCode)return; clearTimeout(pushTimer); pushTimer=setTimeout(cloudPush,1200); }
 async function cloudPush(){
   if(!syncCode)return;
-  try{ setSync('…'); await rpc('pill_save',{p_code:syncCode,p_data:{meds,meals,workouts,log,fitLog,fitCur,fitGroups,fitDate,fitMiss,fitStep,fitUp,_t:stateT}}); setSync('✓'); }
+  try{ setSync('…'); await rpc('pill_save',{p_code:syncCode,p_data:{meds,meals,tips,workouts,log,fitLog,fitCur,fitGroups,fitDate,fitMiss,fitStep,fitUp,_t:stateT}}); setSync('✓'); }
   catch(e){ setSync('!'); }
 }
 async function cloudPull(silent){
@@ -872,6 +922,7 @@ async function cloudPull(silent){
       if(ct>stateT){
         if(Array.isArray(d.meds))meds=d.meds;
         if(Array.isArray(d.meals))meals=d.meals;
+        if(Array.isArray(d.tips))tips=d.tips;
         if(Array.isArray(d.workouts))workouts=d.workouts;
         if(d.fitLog&&typeof d.fitLog==='object')fitLog=d.fitLog;
         if(+d.fitCur)fitCur=+d.fitCur;
@@ -884,6 +935,7 @@ async function cloudPull(silent){
         stateT=ct;
         localStorage.setItem(LS_MEDS,JSON.stringify(meds));
         localStorage.setItem(LS_FOOD,JSON.stringify(meals));
+        localStorage.setItem(LS_TIPS,JSON.stringify(tips));
         localStorage.setItem(LS_FIT,JSON.stringify(workouts));
         localStorage.setItem(LS_FITLOG,JSON.stringify(fitLog));
         localStorage.setItem(LS_FITCUR,String(fitCur));
@@ -895,7 +947,7 @@ async function cloudPull(silent){
         localStorage.setItem(LS_LOG,JSON.stringify(log));
         localStorage.setItem(LS_T,String(stateT));
         fitDatePending=false;      // пришло свежее состояние — наш локальный сдвиг пересчитается сам
-        renderToday(); renderMeds(); renderFood(); renderFit();
+        renderToday(); renderMeds(); renderFood(); renderFit(); renderTips();
       } else if(stateT>ct){ cloudPush(); }
       else if(fitDatePending){ fitDatePending=false; save(); }   // сдвиг даты — единственное новое
     } else if(meds.length||meals.length||workouts.length){ cloudPush(); }
@@ -2281,10 +2333,129 @@ function calHTML(){
   },{passive:false});
 })();
 
+/* ---------- ЛАЙФХАКИ ---------- */
+let tipOpen='';        // какой лайфхак раскрыт
+let tipCat='';         // фильтр по разделу, '' — все
+let tipEditId='';      // что правим, '' — новый
+
+function tipCatList(){
+  let set=new Set();
+  tips.forEach(t=>{ if(t.tag)set.add(t.tag); });
+  return [...set].sort((a,b)=>a.localeCompare(b,'ru'));
+}
+function tipHit(t,q){
+  if(!q)return true;
+  let hay=lc([t.title,t.body,t.tag,t.src].join(' '));
+  return lc(q).split(/\s+/).filter(Boolean).every(w=>
+    hay.indexOf(w)>=0 || (w.length>=4 && hay.indexOf(w.slice(0,-1))>=0));  // «сода» → «соды»
+}
+function dHuman(key){
+  let m=String(key||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m?(m[3]+'.'+m[2]+'.'+m[1]):'';
+}
+
+function renderTips(){
+  let l=document.getElementById('tipList'); if(!l)return;
+  let se=document.getElementById('tipSearch');
+  let q=se?se.value.trim():'';
+  let cats=tipCatList();
+  if(tipCat&&cats.indexOf(tipCat)<0)tipCat='';
+  document.getElementById('tipCats').innerHTML = cats.length
+    ? '<button class="labcat'+(tipCat?'':' on')+'" data-cat="">все</button>'
+      + cats.map(c=>'<button class="labcat'+(c===tipCat?' on':'')+'" data-cat="'+escAttr(c)+'">'
+          +esc(c)+'</button>').join('')
+    : '';
+  let rows=tips.filter(t=>(!tipCat||t.tag===tipCat)&&tipHit(t,q));
+  if(!rows.length){
+    l.innerHTML='<div class="empty-state"><div class="em">💡</div><p>'
+      +(tips.length ? 'Ничего не нашлось.'
+        : 'Пока пусто.<br>Сюда складывай то, что не хочется потерять:<br>протоколы, советы, разборы.')
+      +'</p></div>';
+    return;
+  }
+  l.innerHTML='<div class="card">'+rows.map(t=>{
+    let op=(t.id===tipOpen);
+    let meta=[t.src,dHuman(t.d)].filter(Boolean).map(esc).join(' · ');
+    return '<div class="tip">'
+      +'<button class="tiphead" data-act="open" data-id="'+escAttr(t.id)+'">'
+        +'<span class="tt">'+esc(t.title)+'</span>'
+        +(t.tag?'<span class="tg">'+esc(t.tag)+'</span>':'')
+        +'<span class="ch">'+(op?'▴':'▾')+'</span></button>'
+      +(op
+        ? '<div class="tipbody">'+(t.body&&t.body!==t.title?esc(t.body):'')
+          +(meta?'<div class="tipmeta">'+meta+'</div>':'')
+          +'<div class="tipacts">'
+            +'<button class="btn sm ghost" data-act="edit" data-id="'+escAttr(t.id)+'">Править</button>'
+            +'<button class="btn sm danger" data-act="del" data-id="'+escAttr(t.id)+'">Удалить</button>'
+          +'</div></div>'
+        : '')
+      +'</div>';
+  }).join('')+'</div>';
+}
+
+function tipNew(){ tipEditId=''; tipForm('','',''); }
+function tipEdit(id){
+  let t=tips.find(x=>x.id===id); if(!t)return;
+  tipEditId=id;
+  tipForm((t.title+'\n'+t.body).trim(), t.tag||'', t.src||'');
+}
+function tipForm(text,tag,src){
+  document.getElementById('tipText').value=text;
+  document.getElementById('tipTag').value=tag;
+  document.getElementById('tipSrc').value=src;
+  document.getElementById('tipForm').classList.remove('hidden');
+  document.getElementById('tipAddBtn').classList.add('hidden');
+  document.getElementById('tipText').focus();
+}
+function tipCancel(){
+  document.getElementById('tipForm').classList.add('hidden');
+  document.getElementById('tipAddBtn').classList.remove('hidden');
+  tipEditId='';
+}
+function tipSave(){
+  let raw=document.getElementById('tipText').value.replace(/\r/g,'').trim();
+  if(!raw){ toast('Пустой текст'); return; }
+  let lines=raw.split('\n');
+  let title=lines.shift().trim().replace(/[:.\s]+$/,'');
+  let body=lines.join('\n').trim();
+  if(!body){ body=title; if(title.length>64)title=title.slice(0,61)+'…'; }
+  let tag=document.getElementById('tipTag').value.trim();
+  let src=document.getElementById('tipSrc').value.trim();
+  if(tipEditId){
+    let t=tips.find(x=>x.id===tipEditId);
+    if(t){ t.title=title; t.body=body; t.tag=tag; t.src=src; }
+  } else {
+    let t={id:'t'+uid(), title:title, body:body, tag:tag, src:src, d:todayKey()};
+    tips.unshift(t); tipOpen=t.id;
+  }
+  tipCancel(); save(); renderTips(); toast('Сохранено');
+}
+function tipDel(id){
+  if(!confirm('Удалить этот лайфхак?'))return;
+  tips=tips.filter(t=>t.id!==id);
+  if(tipOpen===id)tipOpen='';
+  save(); renderTips(); toast('Удалено');
+}
+
+(function(){   // делегирование: названия разделов бывают с кавычками, в onclick их не вставить
+  let cc=document.getElementById('tipCats'), ll=document.getElementById('tipList');
+  if(cc)cc.addEventListener('click',e=>{
+    let b=e.target.closest('.labcat'); if(!b)return;
+    tipCat=b.dataset.cat||''; renderTips();
+  });
+  if(ll)ll.addEventListener('click',e=>{
+    let b=e.target.closest('[data-act]'); if(!b)return;
+    let id=b.dataset.id;
+    if(b.dataset.act==='open'){ tipOpen=(tipOpen===id?'':id); renderTips(); }
+    else if(b.dataset.act==='edit') tipEdit(id);
+    else if(b.dataset.act==='del')  tipDel(id);
+  });
+})();
+
 /* ---------- НАВИГАЦИЯ ---------- */
-const TITLES={today:'Сегодня',meds:'Лекарства',fit:'Тренировки',food:'Питание',add:'Добавить',labs:'Анализы',set:'Настройки'};
-const VIEWS=['today','meds','fit','food','add','labs','set'];
-const NAVOF={add:'set',labs:'set'};   // «Добавить» и «Анализы» живут внутри «Ещё»
+const TITLES={today:'Сегодня',meds:'Лекарства',fit:'Тренировки',food:'Питание',add:'Добавить',labs:'Анализы',tips:'Лайфхаки',set:'Настройки'};
+const VIEWS=['today','meds','fit','food','add','labs','tips','set'];
+const NAVOF={add:'set',labs:'set',tips:'set'};   // «Добавить», «Анализы» и «Лайфхаки» живут внутри «Ещё»
 function go(tab){
   VIEWS.forEach(t=>{
     document.getElementById('v-'+t).classList.toggle('hidden',t!==tab);
@@ -2294,12 +2465,13 @@ function go(tab){
   document.getElementById('hTitle').textContent=TITLES[tab];
   let hr=document.getElementById('hRight'); if(hr&&tab!=='fit')hr.innerHTML='';
   if(tab==='today')renderToday(); if(tab==='meds')renderMeds(); if(tab==='food')renderFood(); if(tab==='fit')renderFit();
+  if(tab==='tips')renderTips();
   if(tab==='labs'){renderLabs();labLoad();} if(tab==='set'){updNotifState();aiStateUpd();}
   window.scrollTo(0,0);
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='24.09.2026 17:33 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='26.09.2026 20:12 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
