@@ -1896,6 +1896,17 @@ function setWeight(id,v){
 }
 function delEx(id){ workouts=workouts.filter(w=>w.id!==id); save(); renderFit(); renderToday(); toast('Удалено'); }
 function setFitCur(d){ fitCur=+d; fitView=+d; localStorage.setItem(LS_FITCUR,String(fitCur)); save(); renderFit(); renderToday(); }
+function fitDoToday(d){        // «тренирую это сегодня» — меняем и день цикла, и дату
+  fitCur=+d; fitView=+d; localStorage.setItem(LS_FITCUR,String(fitCur));
+  fitDate=todayKey(); localStorage.setItem(LS_FITDATE,fitDate);
+  fitMissClear();
+  save(); renderFit(); renderToday();
+  fitCheckDone();              // день уже закрыт сегодня — сразу переходим к следующему
+}
+function dayDoneToday(d){      // все упражнения дня отмечены сегодняшним числом
+  let rows=fitRows(d);
+  return rows.length>0 && rows.every(exDone);
+}
 function fitSkip(){ fitMissClear(); setFitCur(fitNext(fitCur));
   toast('Пропущено · следующая'+(fitGroup(fitCur)?' — '+lc(fitGroup(fitCur)):'')); }
 
@@ -2195,7 +2206,9 @@ function renderFit(){
           +dShort(dAdd(fitDateEnsure(),1))+'</button>'
         +'<button class="btn ghost" onclick="fitSkip()">Пропустить совсем — дальше '
           +esc(lc(fitGroup(fitNext(fitCur)))||'следующая')+' →</button>'
-      : '<button class="btn ghost" onclick="setFitCur('+fitView+')">Тренирую это сегодня</button>')
+      : (dayDoneToday(fitView)
+          ? '<div class="sum">Сделано сегодня ✓</div>'
+          : '<button class="btn ghost" onclick="fitDoToday('+fitView+')">Тренирую это сегодня</button>'))
   + (isCur&&fitMiss?'<div class="sum">Перенесено с '+dShort(fitMiss)+' — тренировка не потерялась</div>':'')
   + '<div class="sum" onclick="setRest()">Отдых между подходами '
     + (restSec?mmss(restSec):'не засекать')
@@ -2638,7 +2651,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='27.09.2026 10:00 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='27.09.2026 10:56 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
