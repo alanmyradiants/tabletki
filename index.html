@@ -957,7 +957,7 @@ async function cloudPull(silent){
         if(Array.isArray(d.tips))tips=d.tips;
         if(Array.isArray(d.workouts))workouts=d.workouts;
         if(d.fitLog&&typeof d.fitLog==='object')fitLog=d.fitLog;
-        if(+d.fitCur)fitCur=+d.fitCur;
+        if(+d.fitCur&&+d.fitCur!==fitCur){ fitCur=+d.fitCur; fitView=fitCur; }
         if(d.fitGroups&&typeof d.fitGroups==='object')fitGroups=d.fitGroups;
         if(typeof d.fitDate==='string')fitDate=d.fitDate;
         fitMiss=(typeof d.fitMiss==='string')?d.fitMiss:'';
@@ -1831,7 +1831,7 @@ function fitCheckDone(){   // все упражнения отмечены — �
   if(!rows.length||!rows.every(exDone))return;
   let nx=fitNext(fitCur);
   if(nx===fitCur)return;
-  fitCur=nx; localStorage.setItem(LS_FITCUR,String(fitCur));
+  fitCur=nx; fitView=nx; localStorage.setItem(LS_FITCUR,String(fitCur));
   fitDate=dAdd(todayKey(),fitStep); localStorage.setItem(LS_FITDATE,fitDate);
   fitMissClear();
   save(); renderFit();
@@ -2651,7 +2651,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='27.09.2026 10:56 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='27.09.2026 10:59 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
