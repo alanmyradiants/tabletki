@@ -256,6 +256,20 @@
   nav button .ic{font-size:22px;line-height:1}
   nav button.active{color:var(--green)}
 
+  /* окно отметки подхода: повторы и вес — двумя отдельными полями */
+  .modal{position:fixed;inset:0;z-index:100;background:rgba(10,14,20,.45);
+    display:flex;align-items:center;justify-content:center;padding:20px}
+  .modal.hidden{display:none}
+  .modalbox{width:100%;max-width:340px;background:var(--card);border-radius:20px;padding:18px;
+    box-shadow:0 24px 60px -20px rgba(0,0,0,.45)}
+  .mtitle{font-size:16px;font-weight:800;line-height:1.3;margin-bottom:16px}
+  .mrow{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .mrow label{flex:0 0 92px;font-size:14px;font-weight:700;color:var(--muted)}
+  .mrow input{flex:1;min-width:0;text-align:center;font-size:19px;font-weight:800;padding:12px}
+  .mhint{font-size:12px;color:var(--muted);line-height:1.4;margin:2px 2px 0}
+  .mbtns{display:flex;gap:10px;margin-top:16px}
+  .mbtns .btn{margin:0;width:auto;flex:1}
+
   /* таймер отдыха между подходами — над панелью вкладок */
   .restbar{position:fixed;left:8px;right:8px;bottom:calc(var(--navh, 64px) + 8px);z-index:55;
     max-width:544px;margin:0 auto;display:flex;align-items:center;gap:10px;
@@ -593,6 +607,25 @@
     <div id="foodBanner"></div>
     <div id="foodList"></div>
   </section>
+</div>
+
+<div id="setModal" class="modal hidden">
+  <div class="modalbox">
+    <div class="mtitle" id="setModalTitle"></div>
+    <div class="mrow">
+      <label for="setReps">Повторов</label>
+      <input type="number" id="setReps" inputmode="numeric" min="0" step="1" placeholder="—">
+    </div>
+    <div class="mrow">
+      <label for="setKg">Вес, кг</label>
+      <input type="number" id="setKg" inputmode="decimal" min="0" step="0.5" placeholder="—">
+    </div>
+    <div class="mhint">Вес подставлен рабочий — меняй, только если он был другой. Пустые поля тоже можно: подход просто отметится.</div>
+    <div class="mbtns">
+      <button class="btn ghost" id="setCancel">Отменить</button>
+      <button class="btn green" id="setOk">Готово</button>
+    </div>
+  </div>
 </div>
 
 <div id="restBar" class="restbar hidden"></div>
@@ -1878,31 +1911,70 @@ function acceptSuggest(id){          // первый тап по подходу 
   if(sug){ e.w=sug.kg; w.weight=sug.kg; }
   else if(w.weight!=null){ e.w=w.weight; }
 }
+let setCb=null;
+function askSet(o,cb){           // вместо prompt: два поля — повторы и вес
+  let m=document.getElementById('setModal');
+  if(!m){ cb(null); return; }
+  setCb=cb;
+  document.getElementById('setModalTitle').textContent=o.title||'Подход';
+  let r=document.getElementById('setReps'), k=document.getElementById('setKg');
+  r.value=(o.reps==null||o.reps==='')?'':o.reps;
+  k.value=(o.kg==null)?'':o.kg;
+  m.classList.remove('hidden');
+  setTimeout(()=>{ try{ r.focus(); r.select(); }catch(e){} },60);
+}
+function setClose(res){
+  let m=document.getElementById('setModal'); if(m)m.classList.add('hidden');
+  let cb=setCb; setCb=null;
+  if(cb)cb(res);
+}
+(function(){
+  let m=document.getElementById('setModal'); if(!m)return;
+  let r=document.getElementById('setReps'), k=document.getElementById('setKg');
+  function done(){
+    let p=parseSet(r.value);                       // «12х25» в поле повторов тоже понимаем
+    let g=parseFloat(String(k.value).replace(',','.'));
+    if(p.kg!=null)g=p.kg;
+    setClose({ reps:p.n, kg:(isFinite(g)&&g>0&&g<=500)?g:null });
+  }
+  document.getElementById('setOk').addEventListener('click',done);
+  document.getElementById('setCancel').addEventListener('click',()=>setClose(null));
+  m.addEventListener('click',e=>{ if(e.target===m)setClose(null); });   // тап по фону — отмена
+  [r,k].forEach(el=>el.addEventListener('keydown',e=>{ if(e.key==='Enter')done(); }));
+})();
+
 function toggleSet(id,i){
   fitUseDay(id); acceptSuggest(id);
   let e=fitTouch(id); e.s=e.s||[]; e.kg=e.kg||[];
   while(e.s.length<=i)e.s.push(false);
-  let marked=false;
-  if(e.s[i]){ e.s[i]=false; e.kg[i]=null; restDone(); }   // повторный тап снимает отметку
-  else {
-    let w0=workouts.find(x=>x.id===id)||{};
-    let base=(e.w!=null)?e.w:w0.weight;              // рабочий вес упражнения
-    let pn=(typeof e.s[i-1]==='number')?e.s[i-1]:'';
-    let pk=setKg(e,i-1);
-    let def=(pn==='')?'':(pk!=null?(pn+'х'+fmtKg(pk)):String(pn));
-    let v=prompt('Подход '+(i+1)+': сколько повторов?\n'
-      +'Сбросил вес — пиши через «х»: 12х'+fmtKg(base!=null?base:25)+'\n(можно пропустить)', def);
-    if(v===null)return;
-    let r=parseSet(v);
-    e.s[i]=(r.n!=null)?r.n:true;                     // без числа — просто отметка
-    e.kg[i]=r.kg;                                    // вес подхода, если вписал
-    if(r.kg!=null&&e.w==null){ e.w=r.kg; if(w0.id)w0.weight=r.kg; }
-    marked=true;
+  if(e.s[i]){                                        // повторный тап снимает отметку
+    e.s[i]=false; e.kg[i]=null; restDone();
+    save(); renderFit(); renderToday();
+    if(navigator.vibrate)navigator.vibrate(8);
+    fitCheckDone();
+    return;
   }
-  save(); renderFit(); renderToday();
-  if(navigator.vibrate)navigator.vibrate(8);
-  if(marked)restStart(restLabelFor(id,i));          // подход закрыт — пошёл отдых
-  fitCheckDone();
+  let w0=workouts.find(x=>x.id===id)||{};
+  let base=(e.w!=null)?e.w:w0.weight;                // рабочий вес упражнения
+  let pk=setKg(e,i-1);
+  askSet({
+    title:'Подход '+(i+1)+(w0.sets?' из '+w0.sets:'')+(w0.name?' · '+w0.name:''),
+    reps:(typeof e.s[i-1]==='number')?e.s[i-1]:(w0.reps||''),
+    kg:(pk!=null)?pk:base
+  },res=>{
+    if(!res)return;                                  // отменил
+    let ee=fitTouch(id); ee.s=ee.s||[]; ee.kg=ee.kg||[];
+    while(ee.s.length<=i)ee.s.push(false);
+    ee.s[i]=(res.reps!=null)?res.reps:true;          // без числа — просто отметка
+    ee.kg[i]=res.kg;
+    if(res.kg!=null&&i===0){                         // первый подход задаёт рабочий вес
+      ee.w=res.kg; if(w0.id)w0.weight=res.kg;
+    }
+    save(); renderFit(); renderToday();
+    if(navigator.vibrate)navigator.vibrate(8);
+    restStart(restLabelFor(id,i));                   // подход закрыт — пошёл отдых
+    fitCheckDone();
+  });
 }
 function toggleExAll(id){        // отметить упражнение целиком, не тыкая каждый подход
   fitUseDay(id); acceptSuggest(id);
@@ -2295,7 +2367,8 @@ function renderFit(){
   + 'Галочка справа от названия отмечает всё упражнение разом; кружки — по подходам.<br>'
   + 'Подходы, повторы и вес правятся прямо в карточке; ＋ и − меняют число подходов.<br>'
   + 'Тап по кружку спрашивает, сколько повторов вышло; можно пропустить — тогда это просто отметка.<br>'
-  + 'Сбросил вес на подходе — пиши через «х»: «12х22,5». Одинаковый вес писать не надо.<br><br>'
+  + 'Отметка подхода спрашивает повторы и вес двумя полями; вес подставлен рабочий.<br>'
+  + 'Разные веса по подходам видны отдельной строкой под кружками.<br><br>'
   + 'Все подходы — в отказ, с одним рабочим весом.<br>'
   + 'Перед рабочими один подводящий: 60–65 % от рабочего, 8 повторов — в счёт не идёт.<br>'
   + 'Когда рабочий вес пошёл на 10–12 повторов в первом подходе — со следующей тренировки поднимаешь вес.</div>';
@@ -2721,7 +2794,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='29.09.2026 20:14 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='29.09.2026 20:37 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
