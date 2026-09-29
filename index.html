@@ -139,6 +139,11 @@
   .vthumb .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
   .vthumb .play i{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.93);color:#15181d;
     font-size:12px;font-style:normal;display:flex;align-items:center;justify-content:center;padding-left:2px}
+  /* обложка не сохранилась: показываем не чёрный прямоугольник, а понятную заглушку */
+  .vthumb.noshot{background:var(--card2);border:1px solid var(--line)}
+  .vthumb.noshot .play{flex-direction:column;gap:5px}
+  .vthumb.noshot .play i{background:var(--text);color:#ffffff}
+  .vthumb.noshot .play b{font-size:10.5px;font-weight:700;color:var(--muted)}
   .vthumb.empty{background:var(--card2);border:1.5px dashed var(--line);color:var(--muted);
     display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;line-height:1.3;text-align:center}
   .vswap{font-size:11.5px;font-weight:700;color:var(--muted);cursor:pointer}
@@ -2025,6 +2030,38 @@ function vtileStyle(ar,tall){
 }
 const videoBlobs={};   // скачанные ролики держим в памяти: второй раз открывается сразу
 
+function posterPath(video){      // кадр лежит рядом с роликом: .../<id>-<время>.jpg
+  let m=String(video||'').match(/\/pill-fit\/(.+)\.[a-z0-9]+$/i);
+  return m?m[1]+'.jpg':'';
+}
+function grabFrame(v){           // кадр из уже открытого ролика — лишнего трафика нет
+  return new Promise(res=>{
+    try{
+      if(!v.videoWidth||!v.videoHeight){ res(null); return; }
+      let W=Math.min(360,v.videoWidth), H=Math.round(W*v.videoHeight/v.videoWidth);
+      let c=document.createElement('canvas'); c.width=W; c.height=H;
+      c.getContext('2d').drawImage(v,0,0,W,H);
+      c.toBlob(b=>res(b),'image/jpeg',0.72);
+    }catch(e){ res(null); }      // чужой источник — canvas закрыт, просто пропускаем
+  });
+}
+function healPoster(id,v){       // при загрузке кадр не снялся — снимаем его при просмотре
+  let w=workouts.find(x=>x.id===id);
+  if(!w||w.poster||!videoBlobs[id])return;   // только из своего blob: иначе canvas недоступен
+  let path=posterPath(w.video); if(!path)return;
+  let done=false;
+  v.addEventListener('timeupdate',async function once(){
+    if(done||!v.videoWidth||v.currentTime<0.4)return;   // ждём полсекунды: первый кадр часто чёрный
+    done=true; v.removeEventListener('timeupdate',once);
+    let blob=await grabFrame(v); if(!blob)return;
+    try{
+      let url=await storagePut(path,blob,'image/jpeg');
+      let cur=workouts.find(x=>x.id===id);
+      if(cur&&!cur.poster){ cur.poster=url; save(); }   // без renderFit: он оборвал бы просмотр
+    }catch(e){}
+  });
+}
+
 async function fitShowVideo(id){
   let box=document.getElementById('vid-'+id); if(!box)return;
   let w=workouts.find(x=>x.id===id); if(!w||!w.video)return;
@@ -2062,6 +2099,7 @@ async function fitShowVideo(id){
       +'<a class="btn ghost" style="display:block;text-align:center;text-decoration:none" '
       +'href="'+escAttr(w.video)+'" target="_blank" rel="noopener">▶ Открыть отдельно</a>';
   };
+  healPoster(id,v);
   let pr=v.play(); if(pr&&pr.catch)pr.catch(()=>{});   // не вышло — откроется по кнопке
 }
 
@@ -2128,12 +2166,15 @@ function renderFit(){
     // миниатюра ролика слева: тап — смотреть, подпись под ней — заменить
     let thumb;
     if(w.video){
-      let still = w.poster
-        ? `<img src="${escAttr(w.poster)}" alt="" loading="lazy" onerror="this.remove()">`
-        : `<video src="${escAttr(w.video)}#t=0.5" preload="metadata" muted playsinline></video>`;
-      thumb = `<button class="vthumb" onclick="fitShowVideo('${w.id}')" aria-label="Смотреть видео: ${escAttr(w.name)}">
-          ${still}<span class="play"><i>▶</i></span></button>
-        <label class="vswap">заменить<input type="file" accept="video/*" onchange="fitVideoPicked(this,'${w.id}')"></label>`;
+      // без обложки раньше стоял <video preload="metadata"> — на iPhone он рисует чёрный
+      // прямоугольник и выглядит как потерянное видео. Кадр добываем при первом просмотре.
+      thumb = w.poster
+        ? `<button class="vthumb" onclick="fitShowVideo('${w.id}')" aria-label="Смотреть видео: ${escAttr(w.name)}">
+            <img src="${escAttr(w.poster)}" alt="" loading="lazy" onerror="this.remove()">
+            <span class="play"><i>▶</i></span></button>`
+        : `<button class="vthumb noshot" onclick="fitShowVideo('${w.id}')" aria-label="Смотреть видео: ${escAttr(w.name)}">
+            <span class="play"><i>▶</i><b>видео</b></span></button>`;
+      thumb += `<label class="vswap">заменить<input type="file" accept="video/*" onchange="fitVideoPicked(this,'${w.id}')"></label>`;
     } else {
       thumb = `<label class="vthumb empty">＋<br>видео<input type="file" accept="video/*" onchange="fitVideoPicked(this,'${w.id}')"></label>`;
     }
@@ -2651,7 +2692,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='27.09.2026 10:59 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='29.09.2026 17:51 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
