@@ -62,6 +62,7 @@
   .row .nm{font-size:17px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .row.done .nm{text-decoration:line-through;color:var(--muted)}
   .row .ds{font-size:13.5px;color:var(--muted);margin-top:2px}
+  .row .cook{font-size:12.5px;color:var(--green-d);margin-top:3px;font-weight:600;line-height:1.35}
   .time{
     font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;
     background:var(--card2);padding:7px 11px;border-radius:11px;flex:0 0 auto;color:var(--text)
@@ -1511,6 +1512,49 @@ function plMeals(n){ let a=n%10,b=n%100;
   return n+' приём'+((a===1&&b!==11)?'':((a>=2&&a<=4&&(b<12||b>14))?'а':'ов')); }
 function mealSub(f){ return esc(f.items||'')+(f.kcal?(f.items?' · ':'')+f.kcal+' ккал':''); }
 
+/* ---------- ВЕС В ГОТОВОМ ВИДЕ ---------- */
+// В плане граммы сырые: крупа сухая, мясо и рыба сырые. Взвешиваешь же готовое.
+// Коэффициенты приблизительные: привар круп и ужарка белка зависят от плиты.
+const COOK=[
+  {k:['гречк'],                      m:2.1, w:'гречка'},
+  {k:['перловк'],                    m:3.0, w:'перловка'},
+  {k:['киноа'],                      m:3.0, w:'киноа'},
+  {k:['овсянк','геркулес'],          m:3.0, w:'овсянка'},
+  {k:['кускус'],                     m:2.5, w:'кускус'},
+  {k:['булгур'],                     m:2.7, w:'булгур'},
+  {k:['макарон','спагетти','паста'], m:2.5, w:'макароны'},
+  {k:['пшеничн','пшено'],            m:2.6, w:'крупа'},
+  {k:['рис'],                        m:2.8, w:'рис'},
+  {k:['индейк'],                     m:0.75,w:'индейка'},
+  {k:['курин','куриц','курины'],     m:0.75,w:'курица'},
+  {k:['рибай','говядин','телятин'],  m:0.70,w:'говядина'},
+  {k:['свинин'],                     m:0.70,w:'свинина'},
+  {k:['тунец','тунц'],               m:0.80,w:'тунец'},
+  {k:['лосос'],                      m:0.80,w:'лосось'},
+  {k:['семг'],                       m:0.80,w:'сёмга'},
+  {k:['форел'],                      m:0.80,w:'форель'},
+  {k:['горбуш','скумбри','минта','треск','хек'], m:0.80,w:'рыба'}
+];
+// уже готовое (слабосолёное, отварное, запечённое) пересчитывать не надо
+const COOKED=['слабосол','солен','копчен','отварн','варен','запечен','жарен','готов','консерв'];
+
+function cookedList(items){
+  let out=[];
+  lc(items||'').split(/\s*\+\s*|\s+и\s+|[;,]/).forEach(part=>{
+    let m=part.match(/(\d+(?:[.,]\d+)?)\s*(?:г|гр|грамм[а-я]*)(?![а-я])/);
+    if(!m)return;
+    let g=parseFloat(m[1].replace(',','.'));
+    if(!isFinite(g)||g<=0)return;
+    if(COOKED.some(x=>part.indexOf(x)>=0))return;
+    let hit=null;
+    for(let i=0;i<COOK.length&&!hit;i++)
+      if(COOK[i].k.some(k=>part.indexOf(k)>=0))hit=COOK[i];
+    if(!hit)return;
+    out.push(hit.w+' ≈ '+Math.round(g*hit.m/5)*5+' г');
+  });
+  return out;
+}
+
 function renderFoodDays(){
   let c=document.getElementById('foodDays'); if(!c)return;
   let today=new Date().getDay();
@@ -1559,9 +1603,11 @@ function renderFood(){
     let check=isToday
       ? `<div class="check ${dn?'done':''}" onclick="toggle('${r.key}')">${dn?'✓':''}</div>`
       : '';
+    let ck=cookedList(r.f.items);
     return `<div class="row ${dn?'done':''}">${check}
       <div class="info"><div class="nm">${esc(r.f.name)}</div>
-        <div class="ds">${mealSub(r.f)}</div></div>
+        <div class="ds">${mealSub(r.f)}</div>
+        ${ck.length?`<div class="cook">готовое: ${esc(ck.join(' · '))}</div>`:''}</div>
       <div class="time ${cls}">${r.tm}</div>
       <button class="iconbtn" onclick="delMeal('${r.f.id}')">🗑</button>
     </div>`;
@@ -2794,7 +2840,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='29.09.2026 20:37 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='29.09.2026 21:09 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
