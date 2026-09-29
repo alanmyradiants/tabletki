@@ -1799,12 +1799,29 @@ function setFitUp(){
   if(!isFinite(n)||n<=0||n>20)return;
   fitUp=n; localStorage.setItem(LS_FITUP,String(fitUp)); save(); renderFit();
 }
+function fmtKg(n){ return String(n).replace('.',','); }
+function parseSet(v){            // «12», «12х25», «12x22.5», «12 25», «15 по 30»
+  let str=String(v||'').replace(',','.').trim().toLowerCase();
+  if(!str)return {n:null,kg:null};
+  let p=str.split(/\s*(?:[xх*×]|по|\s)\s*/).filter(Boolean);
+  let n=parseInt(p[0],10), kg=(p.length>1)?parseFloat(p[1]):NaN;
+  return { n:(isFinite(n)&&n>0&&n<1000)?n:null,
+           kg:(isFinite(kg)&&kg>0&&kg<=500)?kg:null };
+}
+function setKg(e,i){             // вес подхода: свой, если записан, иначе рабочий
+  let k=(e&&e.kg)?e.kg[i]:null;
+  return (typeof k==='number')?k:null;
+}
+function sessionWeight(e){       // с чем реально работал: вес первого подхода важнее общего
+  let k=setKg(e,0);
+  return (k!=null)?k:(e?e.w:null);
+}
 function lastSession(id){            // прошлая тренировка с этим упражнением
   let tk=todayKey(), best=null, bd='';
   Object.keys(fitLog).forEach(k=>{
     let i=k.indexOf('|'); if(k.slice(i+1)!==id)return;
     let dt=k.slice(0,i); if(dt>=tk)return;
-    let e=fitLog[k]; if(!e||e.w==null)return;
+    let e=fitLog[k]; if(!e||sessionWeight(e)==null)return;
     if(dt>bd){ bd=dt; best=e; }
   });
   return best?{d:bd,e:best}:null;
@@ -1813,15 +1830,16 @@ function suggestWeight(w){           // правило тренера: 10-12 в 
   let ls=lastSession(w.id); if(!ls)return null;
   let first=(ls.e.s||[])[0];
   let up=(typeof first==='number' && first>=10);
-  return { kg: up ? Math.round((ls.e.w+fitUp)*10)/10 : ls.e.w,
-           up: up, prev: ls.e.w, reps: (typeof first==='number'?first:null), date: ls.d };
+  let prev=sessionWeight(ls.e);
+  return { kg: up ? Math.round((prev+fitUp)*10)/10 : prev,
+           up: up, prev: prev, reps: (typeof first==='number'?first:null), date: ls.d };
 }
 function lastWeight(id){
   let tk=todayKey(), best=null, bd='';
   Object.keys(fitLog).forEach(k=>{
     let i=k.indexOf('|'); if(k.slice(i+1)!==id)return;
     let dt=k.slice(0,i); if(dt>=tk)return;
-    let v=fitLog[k]&&fitLog[k].w;
+    let v=sessionWeight(fitLog[k]);
     if(v!=null&&dt>bd){bd=dt;best=v;}
   });
   return best==null?null:{w:best,d:bd};
@@ -1862,16 +1880,23 @@ function acceptSuggest(id){          // первый тап по подходу 
 }
 function toggleSet(id,i){
   fitUseDay(id); acceptSuggest(id);
-  let e=fitTouch(id); e.s=e.s||[];
+  let e=fitTouch(id); e.s=e.s||[]; e.kg=e.kg||[];
   while(e.s.length<=i)e.s.push(false);
   let marked=false;
-  if(e.s[i]){ e.s[i]=false; restDone(); }           // повторный тап снимает отметку
+  if(e.s[i]){ e.s[i]=false; e.kg[i]=null; restDone(); }   // повторный тап снимает отметку
   else {
-    let prev=(typeof e.s[i-1]==='number')?e.s[i-1]:'';
-    let v=prompt('Сколько повторов в подходе '+(i+1)+'? (можно пропустить)', prev);
+    let w0=workouts.find(x=>x.id===id)||{};
+    let base=(e.w!=null)?e.w:w0.weight;              // рабочий вес упражнения
+    let pn=(typeof e.s[i-1]==='number')?e.s[i-1]:'';
+    let pk=setKg(e,i-1);
+    let def=(pn==='')?'':(pk!=null?(pn+'х'+fmtKg(pk)):String(pn));
+    let v=prompt('Подход '+(i+1)+': сколько повторов?\n'
+      +'Сбросил вес — пиши через «х»: 12х'+fmtKg(base!=null?base:25)+'\n(можно пропустить)', def);
     if(v===null)return;
-    let n=parseInt(String(v).replace(/[^0-9]/g,''),10);
-    e.s[i]=(isFinite(n)&&n>0)?n:true;               // без числа — просто отметка
+    let r=parseSet(v);
+    e.s[i]=(r.n!=null)?r.n:true;                     // без числа — просто отметка
+    e.kg[i]=r.kg;                                    // вес подхода, если вписал
+    if(r.kg!=null&&e.w==null){ e.w=r.kg; if(w0.id)w0.weight=r.kg; }
     marked=true;
   }
   save(); renderFit(); renderToday();
@@ -2206,6 +2231,9 @@ function renderFit(){
     }
     let reps=(e.s||[]).filter(x=>typeof x==='number');
     if(reps.length)hints.push('повторы: '+reps.join(' · '));
+    let kgs=(e.s||[]).map((_,i)=>setKg(e,i));
+    if(kgs.some(x=>x!=null&&x!==kg))                 // одинаковый вес и так виден в поле
+      hints.push('вес: '+kgs.map(x=>x!=null?fmtKg(x):(kg!=null?fmtKg(kg):'—')).join(' · ')+' кг');
     let grow=(typeof (e.s||[])[0]==='number' && e.s[0]>=10)
       ? '<div class="grow">первый подход 10+ — со следующей тренировки поднимай вес</div>' : '';
     return `<div class="ex ${dn?'done':''}">
@@ -2266,7 +2294,8 @@ function renderFit(){
   + 'Не потренировался — тренировка переезжает на ближайший день сама, вместе со всеми следующими.<br>'
   + 'Галочка справа от названия отмечает всё упражнение разом; кружки — по подходам.<br>'
   + 'Подходы, повторы и вес правятся прямо в карточке; ＋ и − меняют число подходов.<br>'
-  + 'Тап по кружку спрашивает, сколько повторов вышло; можно пропустить — тогда это просто отметка.<br><br>'
+  + 'Тап по кружку спрашивает, сколько повторов вышло; можно пропустить — тогда это просто отметка.<br>'
+  + 'Сбросил вес на подходе — пиши через «х»: «12х22,5». Одинаковый вес писать не надо.<br><br>'
   + 'Все подходы — в отказ, с одним рабочим весом.<br>'
   + 'Перед рабочими один подводящий: 60–65 % от рабочего, 8 повторов — в счёт не идёт.<br>'
   + 'Когда рабочий вес пошёл на 10–12 повторов в первом подходе — со следующей тренировки поднимаешь вес.</div>';
@@ -2692,7 +2721,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='29.09.2026 17:51 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='29.09.2026 20:14 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
