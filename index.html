@@ -2176,9 +2176,14 @@ async function putRetry(path,body,type,note){      // мобильный инт�
   }
   throw last;
 }
+const MAX_MB=50;                 // предел хранилища на один файл
+function tooBig(file){           // отказ ловим до загрузки, а не после 59 МБ впустую
+  let mb=mbOf(file);
+  return mb>MAX_MB ? (mb+' МБ — хранилище принимает до '+MAX_MB+' МБ. Обрежь ролик в «Фото» и загрузи снова') : '';
+}
 function bigWarn(file){
   let mb=mbOf(file);
-  return mb>=50 ? (mb+' МБ — на мобильном интернете такой ролик часто обрывается, лучше по Wi-Fi') : '';
+  return mb>=30 ? (mb+' МБ — на мобильном интернете может оборваться, лучше по Wi-Fi') : '';
 }
 function videoMime(file){        // .mov от iPhone — тот же контейнер, что mp4
   let t=(file&&file.type)||'';
@@ -2191,8 +2196,8 @@ async function fitBulkPicked(inp,d){
   let n=fitRows(d).length, total=files.length, ok=0;
   for(let i=0;i<total;i++){
     let file=files[i];
-    let mb=Math.round(file.size/1048576);
-    if(file.size>120*1024*1024){ toast('Ролик '+(i+1)+' весит '+mb+' МБ — пропускаю'); continue; }
+    let mb=mbOf(file), big=tooBig(file);
+    if(big){ toast('Ролик '+(i+1)+': '+big); continue; }
     toast('Загружаю '+(i+1)+' из '+total+(mb>40?(' · '+mb+' МБ'):'')+'…');
     let w={id:'w'+uid(), d:+d, group:fitGroup(d), name:'Упражнение '+(++n), sets:(+d===DAY_ZAR?1:3), reps:'',
            weight:null, time:(+d===DAY_ZAR?'07:30':'18:00'), video:''};
@@ -2221,8 +2226,12 @@ async function fitVideoPicked(inp,id){
   let file=inp.files&&inp.files[0]; if(!file)return;
   inp.value='';
   if(!id||!workouts.some(w=>w.id===id))return;
-  let mb=Math.round(file.size/1048576);
-  if(file.size>120*1024*1024){ toast('Ролик '+mb+' МБ — это слишком много, сними покороче'); return; }
+  let mb=mbOf(file), big=tooBig(file);
+  if(big){
+    let w0=workouts.find(x=>x.id===id);
+    if(w0){ w0.err=big; save(); renderFit(); }     // причина остаётся на карточке
+    toast(big); return;
+  }
   toast(mb>40?('Загружаю '+mb+' МБ — это займёт время…'):'Загружаю видео…');
   try{
     ensureSyncCode();
@@ -2421,6 +2430,7 @@ function renderFit(){
     let failrow = w.err
       ? `<div class="vfailrow">Видео не загрузилось: ${esc(w.err)}
           ${/load failed|связь/i.test(w.err)?'<br><span style="font-weight:500">Связь оборвалась на полпути. Подключись к Wi-Fi или сними ролик покороче.</span>':''}
+          ${/too large|EntityTooLarge|принимает до/i.test(w.err)?'<br><span style="font-weight:500">Открой ролик в «Фото» → «Править» → потяни края дорожки → «Готово» (сохрани как новый), и загрузи обрезанный.</span>':''}
           <label class="btn ghost">↻ Попробовать снова
             <input type="file" accept="video/*" style="display:none" onchange="fitVideoPicked(this,'${w.id}')"></label></div>`
       : '';
@@ -2946,7 +2956,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='30.09.2026 05:43 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='30.09.2026 20:09 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
