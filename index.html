@@ -352,6 +352,8 @@
   .labcats::-webkit-scrollbar{display:none}
   .labcat{flex:0 0 auto;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:20px;padding:8px 14px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
   .labcat.on{background:var(--green);border-color:var(--green);color:#06231b}
+  .labcat.zar{border-color:var(--amber);color:var(--amber)}      /* зарядка — каждый день */
+  .labcat.zar.on{background:var(--amber);border-color:var(--amber);color:#2a1a00}
 
   .tip{border-bottom:1px solid var(--line)}
   .tip:last-child{border-bottom:none}
@@ -796,6 +798,12 @@ function todayRows(){   // лекарства и приёмы пищи впер�
     name:r.m.name, sub:(r.m.dose||'приём')+(r.m.note?' · '+r.m.note:'')}));
   foodRows(new Date().getDay()).forEach(r=>rows.push({type:'food',tm:r.tm,key:r.key,ic:'🥗',
     name:r.f.name, sub:(r.f.items||'')+(r.f.kcal?(r.f.items?' · ':'')+r.f.kcal+' ккал':'')}));
+  let zar=zarRows();
+  if(zar.length){
+    let zd=zar.filter(w=>exDone(w)).length;
+    rows.push({type:'zar',tm:zar[0].time||'07:30',key:'',ic:'☀',
+      name:'Зарядка', sub:plEx(zar.length)+(zd?' · сделано '+zd:''), done:zd, total:zar.length});
+  }
   let fit=(fitDateEnsure()===todayKey())?fitRows(fitCur):[];
   if(fit.length){
     let done=fit.filter(w=>exDone(w)).length;
@@ -823,7 +831,7 @@ function renderToday(){
     let dn=!!log[r.key];
     let cls=''; if(r.tm<nh && !dn)cls='past';
     let diff=hmDiff(r.tm,nh); if(!dn && diff>=0 && diff<=60)cls='soon';
-    if(r.type==='fit'){
+    if(r.type==='fit'||r.type==='zar'){
       let full=r.done>=r.total;
       return `<div class="row" onclick="go('fit')" style="cursor:pointer">
         <div class="progress ${full?'done':''}">${r.done}/${r.total}</div>
@@ -1656,6 +1664,7 @@ const MUSCLES=['грудь','спина','ноги','бицепс','трицеп
   'икры','предплечья','всё тело','все тело','верх','низ'];
 const LS_FITCUR='pills.fitcur', LS_FITG='pills.fitgroups.v1';
 const LS_FITDATE='pills.fitdate', LS_FITSTEP='pills.fitstep';
+const DAY_ZAR=99;               // зарядка: каждый день, в чередование дней не входит
 const LS_FITMISS='pills.fitmiss';   // с какого числа переехала текущая тренировка
 let fitDate=localStorage.getItem(LS_FITDATE)||'';   // когда следующая тренировка
 let fitStep=+localStorage.getItem(LS_FITSTEP)||1;   // через сколько дней следующая
@@ -1694,6 +1703,7 @@ function fitPostpone(){          // «сегодня не буду» — та ж
   toast('Перенесено на '+dShort(fitDate)+(fitGroup(fitCur)?' — '+lc(fitGroup(fitCur)):''));
 }
 function fitDateFor(d){                        // дата тренировки для дня цикла
+  if(+d===DAY_ZAR)return todayKey();           // зарядка — каждый день
   let all=fitCycle(); if(!all.length)return fitDateEnsure();
   let i=all.indexOf(+d); if(i<0)return '';     // пустой день в расписание не встаёт
   let c=all.indexOf(+fitCur); if(c<0)return fitDateEnsure();
@@ -1712,16 +1722,19 @@ function fitMigrate(){   // записи старого формата (по д�
   workouts.forEach(w=>{ if(w.d==null){ w.d=(w.day==null?1:(w.day===0?7:w.day)); ch=true; } });
   return ch;
 }
-function fitDays(){              // все дни — и пустые, только что созданные
+function fitDays(){              // дни цикла — и пустые, только что созданные
   let set=new Set(workouts.map(w=>+w.d||1));
   Object.keys(fitGroups).forEach(k=>{ if(+k)set.add(+k); });
+  set.delete(DAY_ZAR);
   return [...set].sort((a,b)=>a-b);
 }
 function fitCycle(){             // чередование: день без упражнений — не тренировка
-  return [...new Set(workouts.map(w=>+w.d||1))].sort((a,b)=>a-b);
+  return [...new Set(workouts.map(w=>+w.d||1))].filter(d=>d!==DAY_ZAR).sort((a,b)=>a-b);
 }
+function zarRows(){ return fitRows(DAY_ZAR); }
 function fitRows(d){ return workouts.filter(w=>(+w.d||1)===(+d||1)); }
 function fitGroup(d){
+  if(+d===DAY_ZAR)return 'Зарядка';
   if(fitGroups[d])return fitGroups[d];
   let w=fitRows(d).find(x=>x.group); return w?w.group:'';
 }
@@ -1759,8 +1772,8 @@ function addEx(d){
   let name=prompt('Название упражнения','');
   if(name===null)return;
   name=(name||'').trim()||('Упражнение '+(fitRows(d).length+1));
-  workouts.push({id:'w'+uid(), d:+d, group:fitGroup(d), name:name, sets:3, reps:'',
-    weight:null, time:'18:00', video:''});
+  workouts.push({id:'w'+uid(), d:+d, group:fitGroup(d), name:name, sets:(+d===DAY_ZAR?1:3), reps:'',
+    weight:null, time:(+d===DAY_ZAR?'07:30':'18:00'), video:''});
   save(); renderFit(); renderToday();
 }
 function renameEx(id){
@@ -1929,6 +1942,7 @@ function fitTouch(id){
   return fitLog[k];
 }
 function fitCheckDone(){   // все упражнения отмечены — предлагаем следующую тренировку
+  if(fitCur===DAY_ZAR)return;
   let rows=fitRows(fitCur);
   if(!rows.length||!rows.every(exDone))return;
   let nx=fitNext(fitCur);
@@ -1942,6 +1956,7 @@ function fitCheckDone(){   // все упражнения отмечены — �
 function fitUseDay(id){        // отметка в чужом дне не двигает цикл без спроса
   let w=workouts.find(x=>x.id===id); if(!w)return;
   let d=+w.d||1;
+  if(d===DAY_ZAR)return;       // зарядка вне цикла — расписание не трогает
   if(d===fitCur)return;
   let g=fitGroup(d);
   if(!confirm('Сегодня тренируешь этот день'+(g?' ('+lc(g)+')':'')+'?\nРасписание сдвинется на него.'))return;
@@ -2123,8 +2138,8 @@ async function fitBulkPicked(inp,d){
     let mb=Math.round(file.size/1048576);
     if(file.size>120*1024*1024){ toast('Ролик '+(i+1)+' весит '+mb+' МБ — пропускаю'); continue; }
     toast('Загружаю '+(i+1)+' из '+total+(mb>40?(' · '+mb+' МБ'):'')+'…');
-    let w={id:'w'+uid(), d:+d, group:fitGroup(d), name:'Упражнение '+(++n), sets:3, reps:'',
-           weight:null, time:'18:00', video:''};
+    let w={id:'w'+uid(), d:+d, group:fitGroup(d), name:'Упражнение '+(++n), sets:(+d===DAY_ZAR?1:3), reps:'',
+           weight:null, time:(+d===DAY_ZAR?'07:30':'18:00'), video:''};
     workouts.push(w); save(); renderFit();
     try{
       ensureSyncCode();
@@ -2253,12 +2268,16 @@ function renderFitDays(){
   let ci=days.indexOf(+fitCur);
   let ordered=(ci<0)?days:days.slice(ci).concat(days.slice(0,ci));   // ближайшая тренировка первой
   ordered=ordered.filter(d=>fitDateFor(d)).concat(ordered.filter(d=>!fitDateFor(d)));  // пустые — в хвост
-  c.innerHTML=ordered.map(d=>{
-    let dt=fitDateFor(d);
-    let lbl=dt?((dt===tk)?'сегодня':dShort(dt)):('день '+d+' · пусто');
-    return '<button class="labcat'+(d===fitView?' on':'')+'" onclick="selectFitDay('+d+')">'
-      +lbl+'</button>';
-  }).join('')+'<button class="labcat" onclick="addFitDay()">＋ день</button>';
+  let zar=zarRows();
+  let zdone=zar.length&&zar.every(exDone);
+  c.innerHTML='<button class="labcat zar'+(fitView===DAY_ZAR?' on':'')+'" onclick="selectFitDay('+DAY_ZAR+')">'
+      +(zdone?'☀ зарядка ✓':'☀ зарядка')+'</button>'
+    +ordered.map(d=>{
+      let dt=fitDateFor(d);
+      let lbl=dt?((dt===tk)?'сегодня':dShort(dt)):('день '+d+' · пусто');
+      return '<button class="labcat'+(d===fitView?' on':'')+'" onclick="selectFitDay('+d+')">'
+        +lbl+'</button>';
+    }).join('')+'<button class="labcat" onclick="addFitDay()">＋ день</button>';
 }
 function selectFitDay(d){ fitView=+d; renderFit(); }
 
@@ -2268,29 +2287,36 @@ function renderFit(){
   if(fitMigrate())save();
   let days=fitDays(), cyc=fitCycle();
   if(cyc.length&&cyc.indexOf(fitCur)<0){ fitCur=cyc[0]; localStorage.setItem(LS_FITCUR,String(fitCur)); }
-  if(days.indexOf(fitView)<0)fitView=fitCur;
+  if(fitView!==DAY_ZAR&&days.indexOf(fitView)<0)fitView=fitCur;
+  let isZar=(fitView===DAY_ZAR);
   renderFitDays();
-  let isCur=(fitView===fitCur);
+  let isCur=(fitView===fitCur)&&!isZar;
   let rows=fitRows(fitView);
   if(!rows.length){
     let g=fitGroup(fitView);
     let hr0=document.getElementById('hRight');
-    if(hr0)hr0.innerHTML=days.length
-      ? `<div class="g" onclick="setFitGroup(${fitView})">${esc(g||'Тренировка')}</div><div class="p">день ${fitView} · пусто</div>`
+    if(hr0)hr0.innerHTML=(isZar||days.length)
+      ? `<div class="g">${esc(isZar?'Зарядка':(g||'Тренировка'))}</div>`
+        +`<div class="p">${isZar?'каждый день · пусто':('день '+fitView+' · пусто')}</div>`
       : '';
-    bn.innerHTML = days.length
+    bn.innerHTML = isZar
+      ? `<div class="banner empty"><div class="lbl">Зарядка</div>
+          <div class="big" style="color:var(--text)">Каждый день</div>
+          <div class="sub">Загрузи ролики — они будут показываться каждый день</div></div>`
+      : (days.length
       ? `<div class="banner empty"><div class="lbl">День ${fitView}</div>
           <div class="big" style="color:var(--text)">${esc(g||'Пока пусто')}</div>
           <div class="sub">Пока упражнений нет, этот день не попадёт в расписание</div></div>`
-      : '';
-    c.innerHTML='<div class="empty-state" style="padding:30px 20px"><div class="em">🏋️</div><p>'
-      +(days.length?'В этом дне ещё нет упражнений.':'Плана пока нет.<br>Добавляй упражнения по одному —<br>к каждому сразу цепляется видео.')
+      : '');
+    c.innerHTML='<div class="empty-state" style="padding:30px 20px"><div class="em">'+(isZar?'☀':'🏋️')+'</div><p>'
+      +(isZar?'Зарядки пока нет.<br>Загрузи ролики — они будут<br>показываться каждый день.'
+             :(days.length?'В этом дне ещё нет упражнений.':'Плана пока нет.<br>Добавляй упражнения по одному —<br>к каждому сразу цепляется видео.'))
       +'</p></div>'
       +'<button class="btn green" onclick="addEx('+fitView+')">＋ Упражнение</button>'
       +'<label class="btn ghost" style="display:block;text-align:center">＋ Несколько видео сразу'
       +'<input type="file" accept="video/*" multiple style="display:none" onchange="fitBulkPicked(this,'+fitView+')"></label>'
-      +(days.length?'<button class="btn ghost" onclick="setFitGroup('+fitView+')">Что тренируем в этот день</button>':'')
-      +(days.length>1?'<button class="btn ghost" onclick="delFitDay('+fitView+')">Убрать день '+fitView+' из цикла</button>':'')
+      +(!isZar&&days.length?'<button class="btn ghost" onclick="setFitGroup('+fitView+')">Что тренируем в этот день</button>':'')
+      +(!isZar&&days.length>1?'<button class="btn ghost" onclick="delFitDay('+fitView+')">Убрать день '+fitView+' из цикла</button>':'')
       +'<div class="hint" style="text-align:center">Можно и целиком текстом: ⚙️ «Ещё» → «Добавить» → «Тренировки».</div>';
     return;
   }
@@ -2299,8 +2325,10 @@ function renderFit(){
   bn.innerHTML='';
   let hr=document.getElementById('hRight');
   let vd=fitDateFor(fitView);
-  if(hr)hr.innerHTML=`<div class="g" onclick="setFitGroup(${fitView})">${esc(group||'Тренировка')}</div>`
-    +`<div class="p">${vd===todayKey()?'сегодня':dShort(vd)} · сделано ${done} из ${rows.length}</div>`;
+  if(hr)hr.innerHTML=(isZar
+      ? `<div class="g">Зарядка</div>`
+      : `<div class="g" onclick="setFitGroup(${fitView})">${esc(group||'Тренировка')}</div>`)
+    +`<div class="p">${isZar?'каждый день':(vd===todayKey()?'сегодня':dShort(vd))} · сделано ${done} из ${rows.length}</div>`;
   c.innerHTML='<div class="card">'+rows.map(w=>{
     let e=fitEntry(w.id)||{}, dn=exDone(w);
     let last=lastWeight(w.id);
@@ -2388,7 +2416,8 @@ function renderFit(){
   + '<button class="btn green" onclick="addEx('+fitView+')">＋ Упражнение</button>'
   + '<label class="btn ghost" style="display:block;text-align:center">＋ Несколько видео сразу'
   + '<input type="file" accept="video/*" multiple style="display:none" onchange="fitBulkPicked(this,'+fitView+')"></label>'
-  + (isCur
+  + (isZar ? ''
+    : isCur
       ? '<button class="btn ghost" onclick="fitPostpone()">Не сегодня — перенести на '
           +dShort(dAdd(fitDateEnsure(),1))+'</button>'
         +'<button class="btn ghost" onclick="fitSkip()">Пропустить совсем — дальше '
@@ -2459,6 +2488,7 @@ function fitDoneDays(){                // когда тренировки реа
     let i=k.indexOf('|'); if(i<0)return;
     let dt=k.slice(0,i), id=k.slice(i+1);
     let w=workouts.find(x=>x.id===id); if(!w)return;
+    if((+w.d||1)===DAY_ZAR)return;          // зарядка каждый день — календарь ею не забиваем
     let e=fitLog[k]; if(!e)return;
     if(!((e.s||[]).some(Boolean)||e.d))return;
     out[dt]=+w.d||1;
@@ -2840,7 +2870,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='29.09.2026 21:09 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='30.09.2026 04:46 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
