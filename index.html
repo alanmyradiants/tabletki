@@ -2155,8 +2155,30 @@ async function storagePut(path,body,type){
 }
 // файл из <input> живёт, пока живёт само поле; список перерисовывается — читаем заранее
 async function fileBlob(file){
+  if(!file||file.size>25*1024*1024)return file;   // крупный отдаём как есть, копия только навредит
   try{ return new Blob([await file.arrayBuffer()], {type:videoMime(file)}); }
   catch(e){ return file; }
+}
+function mbOf(f){ return Math.round(((f&&f.size)||0)/1048576); }
+function netErr(e){                                // оборвалась связь, а не ответил сервер
+  return /load failed|network|failed to fetch|timed? ?out|соедин/i.test(String((e&&e.message)||''));
+}
+async function putRetry(path,body,type,note){      // мобильный интернет рвёт длинные загрузки
+  let last=null;
+  for(let a=1;a<=3;a++){
+    try{ return await storagePut(path,body,type); }
+    catch(e){
+      last=e;
+      if(!netErr(e)||a===3)throw e;                // сервер ответил отказом — повтор не поможет
+      if(note)toast(note+' · связь оборвалась, пробую ещё раз ('+(a+1)+' из 3)');
+      await new Promise(r=>setTimeout(r,1500*a));
+    }
+  }
+  throw last;
+}
+function bigWarn(file){
+  let mb=mbOf(file);
+  return mb>=50 ? (mb+' МБ — на мобильном интернете такой ролик часто обрывается, лучше по Wi-Fi') : '';
 }
 function videoMime(file){        // .mov от iPhone — тот же контейнер, что mp4
   let t=(file&&file.type)||'';
@@ -2179,14 +2201,16 @@ async function fitBulkPicked(inp,d){
       ensureSyncCode();
       let ext=(file.name.split('.').pop()||'mp4').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,4)||'mp4';
       let base=syncCode+'/'+w.id+'-'+Date.now();
-      let body=await fileBlob(file);              // читаем сразу: список успел перерисоваться
+      let warn=bigWarn(file); if(warn)toast(warn);
+      let body=await fileBlob(file);              // мелкий читаем сразу: список успел перерисоваться
       let shot=await videoPoster(body);
-      w.video=await storagePut(base+'.'+ext, body, videoMime(file));
+      w.video=await putRetry(base+'.'+ext, body, videoMime(file), 'Ролик '+(i+1));
       if(shot&&shot.blob){ try{ w.poster=await storagePut(base+'.jpg', shot.blob, 'image/jpeg'); }catch(e){} }
       w.ar=(shot&&shot.ar)?Math.round(shot.ar*1000)/1000:null;
       w.err=''; ok++; save(); renderFit();
     }catch(e){
-      w.err=(e&&e.message)||'ошибка'; save(); renderFit();
+      w.err=((e&&e.message)||'ошибка')+' · '+mbOf(file)+' МБ';
+      save(); renderFit();
       toast('Ролик '+(i+1)+' не загрузился');
     }
   }
@@ -2204,9 +2228,10 @@ async function fitVideoPicked(inp,id){
     ensureSyncCode();
     let ext=(file.name.split('.').pop()||'mp4').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,4)||'mp4';
     let base=syncCode+'/'+id+'-'+Date.now();
-    let body=await fileBlob(file);               // читаем до перерисовки: iOS теряет файл вместе с полем
+    let warn=bigWarn(file); if(warn)toast(warn);
+    let body=await fileBlob(file);               // мелкий читаем до перерисовки списка
     let shot=await videoPoster(body);
-    let url=await storagePut(base+'.'+ext, body, videoMime(file));
+    let url=await putRetry(base+'.'+ext, body, videoMime(file), 'Видео');
     let poster='';
     if(shot&&shot.blob){ try{ poster=await storagePut(base+'.jpg', shot.blob, 'image/jpeg'); }catch(e){} }
     let w=workouts.find(x=>x.id===id);
@@ -2216,7 +2241,7 @@ async function fitVideoPicked(inp,id){
     toast('Видео добавлено ✓');
   }catch(e){
     let w=workouts.find(x=>x.id===id);
-    if(w){ w.err=(e&&e.message)||'ошибка'; save(); renderFit(); }
+    if(w){ w.err=((e&&e.message)||'ошибка')+' · '+mbOf(file)+' МБ'; save(); renderFit(); }
     toast('Не получилось загрузить видео');
   }
 }
@@ -2395,6 +2420,7 @@ function renderFit(){
     }
     let failrow = w.err
       ? `<div class="vfailrow">Видео не загрузилось: ${esc(w.err)}
+          ${/load failed|связь/i.test(w.err)?'<br><span style="font-weight:500">Связь оборвалась на полпути. Подключись к Wi-Fi или сними ролик покороче.</span>':''}
           <label class="btn ghost">↻ Попробовать снова
             <input type="file" accept="video/*" style="display:none" onchange="fitVideoPicked(this,'${w.id}')"></label></div>`
       : '';
@@ -2920,7 +2946,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='30.09.2026 05:09 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='30.09.2026 05:43 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
