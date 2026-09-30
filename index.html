@@ -804,7 +804,7 @@ function todayRows(){   // лекарства и приёмы пищи впер�
     rows.push({type:'zar',tm:zar[0].time||'07:30',key:'',ic:'☀',
       name:'Зарядка', sub:plEx(zar.length)+(zd?' · сделано '+zd:''), done:zd, total:zar.length});
   }
-  let fit=(fitDateEnsure()===todayKey())?fitRows(fitCur):[];
+  let fit=(fitDateEnsure()<=fitKey())?fitRows(fitCur):[];   // незакрытая вчерашняя — тоже сегодня
   if(fit.length){
     let done=fit.filter(w=>exDone(w)).length;
     rows.push({type:'fit',tm:fit[0].time||'18:00',key:'',ic:'🏋️',
@@ -1684,15 +1684,36 @@ let fitMiss=localStorage.getItem(LS_FITMISS)||'';   // откуда перене
 function fitMissSet(d){ if(d&&(!fitMiss||d<fitMiss))fitMiss=d; localStorage.setItem(LS_FITMISS,fitMiss); }
 function fitMissClear(){ fitMiss=''; localStorage.setItem(LS_FITMISS,''); }
 let fitDatePending=false;        // дату сдвинули локально — отправим в облако после первой сверки
+function dDiff(a,b){             // на сколько дней a позже b
+  return Math.round((Date.parse(a+'T00:00:00Z')-Date.parse(b+'T00:00:00Z'))/86400000);
+}
+function fitKey(){               // тренировочный день: до 5 утра это ещё вчерашняя тренировка
+  let d=new Date();
+  if(d.getHours()<5)d.setDate(d.getDate()-1);
+  return todayKey(d);
+}
+function fitStarted(key){        // в этот день по текущей тренировке уже что-то отмечено
+  if(!key)return false;
+  return fitRows(fitCur).some(w=>{
+    let e=fitLog[key+'|'+w.id];
+    return !!(e && ((e.s||[]).some(Boolean) || e.d));
+  });
+}
 function fitDateEnsure(){        // не потренировался — тренировка переезжает вперёд, а не теряется
-  let tk=todayKey();
+  let tk=fitKey();
   if(!fitDate||fitDate<tk){
-    fitMissSet(fitDate);         // запоминаем исходное число, чтобы было видно перенос
-    fitDate=tk; localStorage.setItem(LS_FITDATE,fitDate);
-    fitDatePending=true;         // save() здесь нельзя: первый рендер идёт до сверки с облаком
+    // начатую в свой день тренировку не переносим: отметки принадлежат тому дню
+    if(!(fitStarted(fitDate)&&dDiff(tk,fitDate)<=Math.max(1,fitStep))){
+      fitMissSet(fitDate);       // запоминаем исходное число, чтобы было видно перенос
+      fitDate=tk; localStorage.setItem(LS_FITDATE,fitDate);
+      fitDatePending=true;       // save() здесь нельзя: первый рендер идёт до сверки с облаком
+    }
   }
   if(fitMiss&&fitMiss>=fitDate)fitMissClear();
   return fitDate;
+}
+function sessKey(){              // к какой дате привязаны отметки текущей тренировки
+  return (fitView===DAY_ZAR)?fitKey():fitDateEnsure();
 }
 function fitPostpone(){          // «сегодня не буду» — та же тренировка, просто позже
   let cur=fitDateEnsure();
@@ -1876,7 +1897,7 @@ function plSets(n){ let a=n%10,b=n%100;
   return n+' подход'+((a===1&&b!==11)?'':((a>=2&&a<=4&&(b<12||b>14))?'а':'ов')); }
 function plEx(n){ let a=n%10,b=n%100;
   return n+' упражнени'+((a===1&&b!==11)?'е':((a>=2&&a<=4&&(b<12||b>14))?'я':'й')); }
-function fitEntry(id,dateKey){ return fitLog[(dateKey||todayKey())+'|'+id] || null; }
+function fitEntry(id,dateKey){ return fitLog[(dateKey||sessKey())+'|'+id] || null; }
 function exDone(w){
   let e=fitEntry(w.id); if(!e)return false;
   if(!w.sets) return !!e.d;
@@ -1909,7 +1930,7 @@ function sessionWeight(e){       // с чем реально работал: в�
   return (k!=null)?k:(e?e.w:null);
 }
 function lastSession(id){            // прошлая тренировка с этим упражнением
-  let tk=todayKey(), best=null, bd='';
+  let tk=sessKey(), best=null, bd='';
   Object.keys(fitLog).forEach(k=>{
     let i=k.indexOf('|'); if(k.slice(i+1)!==id)return;
     let dt=k.slice(0,i); if(dt>=tk)return;
@@ -1927,7 +1948,7 @@ function suggestWeight(w){           // правило тренера: 10-12 в 
            up: up, prev: prev, reps: (typeof first==='number'?first:null), date: ls.d };
 }
 function lastWeight(id){
-  let tk=todayKey(), best=null, bd='';
+  let tk=sessKey(), best=null, bd='';
   Object.keys(fitLog).forEach(k=>{
     let i=k.indexOf('|'); if(k.slice(i+1)!==id)return;
     let dt=k.slice(0,i); if(dt>=tk)return;
@@ -1937,7 +1958,7 @@ function lastWeight(id){
   return best==null?null:{w:best,d:bd};
 }
 function fitTouch(id){
-  let k=todayKey()+'|'+id;
+  let k=sessKey()+'|'+id;
   if(!fitLog[k])fitLog[k]={s:[],w:null,d:false};
   return fitLog[k];
 }
@@ -1947,8 +1968,11 @@ function fitCheckDone(){   // все упражнения отмечены — �
   if(!rows.length||!rows.every(exDone))return;
   let nx=fitNext(fitCur);
   if(nx===fitCur)return;
+  let was=fitDateEnsure();                       // следующая — через шаг от ЭТОЙ тренировки,
   fitCur=nx; fitView=nx; localStorage.setItem(LS_FITCUR,String(fitCur));
-  fitDate=dAdd(todayKey(),fitStep); localStorage.setItem(LS_FITDATE,fitDate);
+  fitDate=dAdd(was,fitStep);                     // а не от сегодняшнего числа
+  if(fitDate<fitKey())fitDate=dAdd(fitKey(),fitStep);
+  localStorage.setItem(LS_FITDATE,fitDate);
   fitMissClear();
   save(); renderFit();
   toast('Тренировка закрыта ✓ Следующая '+dShort(fitDate)+(fitGroup(nx)?' — '+lc(fitGroup(nx)):''));
@@ -1961,7 +1985,7 @@ function fitUseDay(id){        // отметка в чужом дне не дв�
   let g=fitGroup(d);
   if(!confirm('Сегодня тренируешь этот день'+(g?' ('+lc(g)+')':'')+'?\nРасписание сдвинется на него.'))return;
   fitCur=d; localStorage.setItem(LS_FITCUR,String(fitCur));
-  fitDate=todayKey(); localStorage.setItem(LS_FITDATE,fitDate);
+  fitDate=fitKey(); localStorage.setItem(LS_FITDATE,fitDate);
   fitMissClear();
 }
 function acceptSuggest(id){          // первый тап по подходу подтверждает предложенный вес
@@ -2061,7 +2085,7 @@ function delEx(id){ workouts=workouts.filter(w=>w.id!==id); save(); renderFit();
 function setFitCur(d){ fitCur=+d; fitView=+d; localStorage.setItem(LS_FITCUR,String(fitCur)); save(); renderFit(); renderToday(); }
 function fitDoToday(d){        // «тренирую это сегодня» — меняем и день цикла, и дату
   fitCur=+d; fitView=+d; localStorage.setItem(LS_FITCUR,String(fitCur));
-  fitDate=todayKey(); localStorage.setItem(LS_FITDATE,fitDate);
+  fitDate=fitKey(); localStorage.setItem(LS_FITDATE,fitDate);
   fitMissClear();
   save(); renderFit(); renderToday();
   fitCheckDone();              // день уже закрыт сегодня — сразу переходим к следующему
@@ -2328,7 +2352,7 @@ function renderFit(){
   if(hr)hr.innerHTML=(isZar
       ? `<div class="g">Зарядка</div>`
       : `<div class="g" onclick="setFitGroup(${fitView})">${esc(group||'Тренировка')}</div>`)
-    +`<div class="p">${isZar?'каждый день':(vd===todayKey()?'сегодня':dShort(vd))} · сделано ${done} из ${rows.length}</div>`;
+    +`<div class="p">${isZar?'каждый день':(vd<=fitKey()?(vd===fitKey()?'сегодня':dShort(vd)+' · не закрыта'):dShort(vd))} · сделано ${done} из ${rows.length}</div>`;
   c.innerHTML='<div class="card">'+rows.map(w=>{
     let e=fitEntry(w.id)||{}, dn=exDone(w);
     let last=lastWeight(w.id);
@@ -2430,7 +2454,7 @@ function renderFit(){
     + (restSec?mmss(restSec):'не засекать')
     + ' <span class="edit">изменить ✎</span></div>'
   + '<div class="sum" onclick="setFitStep()">'
-    + (fitDateEnsure()===todayKey()?'Сегодня · ':'Следующая '+dShort(fitDate)+' · ')
+    + (fitDateEnsure()<=fitKey()?'Сегодня · ':'Следующая '+dShort(fitDate)+' · ')
     + (fitStep===1?'каждый день':(fitStep===2?'через день':'через '+(fitStep-1)+' дня'))
     + ' <span class="edit">изменить ✎</span></div>'
   + '<div class="rules">Вес зелёным — подсказка приложения по прошлой тренировке, а не твоя цифра.<br>'
@@ -2870,7 +2894,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='30.09.2026 04:46 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='30.09.2026 04:53 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();
