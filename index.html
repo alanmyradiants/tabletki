@@ -2384,45 +2384,70 @@ function healPoster(id,v){       // при загрузке кадр не сня
   });
 }
 
-async function fitShowVideo(id){
-  let box=document.getElementById('vid-'+id); if(!box)return;
-  let w=workouts.find(x=>x.id===id); if(!w||!w.video)return;
-  let ar=w.ar||1.777;
-  let src=w.video;
-  if(!videoBlobs[id]){
-    box.innerHTML='<div class="vload" style="'+vtileStyle(ar,true)+'">Загружаю видео…</div>';
-    try{
-      // Плеер iPhone требует отдачи по кускам, а хранилище её не даёт —
-      // поэтому качаем ролик целиком и играем из памяти.
-      let r=await fetch(w.video,{mode:'cors'});
-      if(!r.ok) throw new Error('http '+r.status);
-      let b=await r.blob();
-      videoBlobs[id]=URL.createObjectURL(new Blob([b],{type:'video/mp4'}));
-    }catch(e){ videoBlobs[id]=''; }
-  }
-  if(videoBlobs[id])src=videoBlobs[id];
+function mountVideo(id,box,src,ar,onFail){
   box.innerHTML='<video class="exvideo" style="'+vtileStyle(ar,true)+'" src="'
     +escAttr(src)+'" controls playsinline preload="auto"></video>';
-  let v=box.querySelector('video'); if(!v)return;
+  let v=box.querySelector('video'); if(!v)return null;
+  let w=workouts.find(x=>x.id===id);
   v.onloadedmetadata=()=>{                       // пропорции берём у самого ролика
-    if(v.videoWidth&&v.videoHeight){
+    if(w&&v.videoWidth&&v.videoHeight){
       let a=Math.round(v.videoWidth/v.videoHeight*1000)/1000;
       if(w.ar!==a){ w.ar=a; save(); v.style.cssText=vtileStyle(a,true); }
     }
   };
-  v.onerror=()=>{
-    let e=v.error, c=e?e.code:0;
-    delete videoBlobs[id];                       // вдруг скачалось битым — дадим перекачать
-    box.innerHTML='<div class="vfail">'
-      +(c===4?'Этот браузер не открывает формат ролика.<br>На телефоне он обычно играет.'
-             :'Видео не загрузилось (код '+c+').')
-      +'</div>'
-      +'<button class="btn ghost" onclick="fitShowVideo(\''+id+'\')">↻ Попробовать снова</button>'
-      +'<a class="btn ghost" style="display:block;text-align:center;text-decoration:none" '
-      +'href="'+escAttr(w.video)+'" target="_blank" rel="noopener">▶ Открыть отдельно</a>';
-  };
+  v.onerror=()=>{ if(onFail)onFail(v.error?v.error.code:0); };
   healPoster(id,v);
-  let pr=v.play(); if(pr&&pr.catch)pr.catch(()=>{});   // не вышло — откроется по кнопке
+  let pr=v.play(); if(pr&&pr.catch)pr.catch(()=>{});   // не вышло — запустится кнопкой
+  return v;
+}
+function vidFail(id,box,w,why){
+  delete videoBlobs[id];                         // вдруг скачалось битым — дадим перекачать
+  box.innerHTML='<div class="vfail">Видео не открылось'+(why?' ('+esc(String(why))+')':'')+'</div>'
+    +'<button class="btn ghost" onclick="fitShowVideo(\''+id+'\')">↻ Попробовать снова</button>'
+    +'<a class="btn ghost" style="display:block;text-align:center;text-decoration:none" '
+    +'href="'+escAttr(w.video)+'" target="_blank" rel="noopener">▶ Открыть отдельно</a>';
+}
+// запасной путь: качаем ролик целиком и играем из памяти. Нужен, если плеер
+// не умеет тянуть этот адрес по кускам. Процент — чтобы экран не выглядел мёртвым.
+async function vidDownload(id,box,w,ar){
+  box.innerHTML='<div class="vload" style="'+vtileStyle(ar,true)+'">Загружаю видео… '
+    +'<b id="vp-'+id+'"></b></div>';
+  try{
+    let r=await fetch(w.video,{mode:'cors'});
+    if(!r.ok)throw new Error('код '+r.status);
+    let total=+(r.headers.get('content-length')||0), got=0, parts=[];
+    let pe=document.getElementById('vp-'+id);
+    if(r.body&&r.body.getReader){
+      let rd=r.body.getReader();
+      for(;;){
+        let s=await rd.read();
+        if(s.done)break;
+        parts.push(s.value); got+=s.value.length;
+        if(pe)pe.textContent=total?(Math.round(got/total*100)+'%'):(Math.round(got/1048576)+' МБ');
+      }
+    } else parts=[await r.blob()];
+    videoBlobs[id]=URL.createObjectURL(new Blob(parts,{type:'video/mp4'}));
+    mountVideo(id,box,videoBlobs[id],ar,c=>vidFail(id,box,w,'код '+c));
+  }catch(e){ vidFail(id,box,w,(e&&e.message)||'ошибка'); }
+}
+async function fitShowVideo(id){
+  let box=document.getElementById('vid-'+id); if(!box)return;
+  let w=workouts.find(x=>x.id===id); if(!w||!w.video)return;
+  let ar=w.ar||1.777;
+
+  if(videoBlobs[id]){                            // уже качали — играем из памяти
+    mountVideo(id,box,videoBlobs[id],ar,c=>vidFail(id,box,w,'код '+c));
+    return;
+  }
+  // сперва играем прямо с адреса: ролик стартует через секунду, а не после
+  // скачивания всех 39 МБ. Не получилось — уходим в запасной путь.
+  let fell=false;
+  const fallback=()=>{ if(fell)return; fell=true; vidDownload(id,box,w,ar); };
+  if(!mountVideo(id,box,w.video,ar,fallback))return;
+  setTimeout(()=>{                               // за это время не пришли даже размеры кадра
+    let el=box.querySelector('video');
+    if(el&&el.readyState<1)fallback();
+  },12000);
 }
 
 function renderFitDays(){
@@ -3042,7 +3067,7 @@ function go(tab){
 }
 
 /* ---------- СТАРТ ---------- */
-const APP_VER='01.10.2026 07:28 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
+const APP_VER='01.10.2026 16:03 UTC';   // видно в «Ещё» — чтобы понимать, доехало ли обновление
 (function(){let e=document.getElementById('appVer'); if(e)e.textContent='Версия '+APP_VER;})();
 function setDate(){
   let d=new Date();

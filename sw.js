@@ -1,4 +1,4 @@
-const CACHE='pills-v23';
+const CACHE='pills-v24';
 const ASSETS=['./','./index.html','./manifest.json','./icon.svg'];
 self.addEventListener('install',e=>{
   self.skipWaiting();
@@ -16,6 +16,14 @@ self.addEventListener('activate',e=>{
 self.addEventListener('fetch',e=>{
   if(e.request.method!=='GET')return;
   const req=e.request;
+  // Чужие адреса и медиа не трогаем вовсе. Плеер тянет видео кусками (Range),
+  // а кэш на такой запрос отдаёт что попало — ролик просто не открывается.
+  // Плюс каждый просмотр клал в кэш копию файла на десятки мегабайт.
+  let sameOrigin=false;
+  try{ sameOrigin = new URL(req.url).origin === self.location.origin; }catch(_){}
+  if(!sameOrigin) return;
+  if(req.headers.has('range')) return;
+  if(req.destination==='video'||req.destination==='audio') return;
   const isHTML = req.mode==='navigate' || (req.headers.get('accept')||'').includes('text/html');
   if(isHTML){
     // network-first: страница всегда грузится свежая, если есть интернет
